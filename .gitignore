@@ -1,0 +1,13 @@
+# Ignore virtual environment directories
+.env
+.venv
+
+# Ignore IDE configuration files
+.idea/
+
+# Ignore __pycache__ directories
+**/__pycache__/
+
+# Ignore temporary files
+*.tmp
+*.swp
