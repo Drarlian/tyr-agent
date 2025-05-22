@@ -1,4 +1,4 @@
-from functions.ai_functions.gemini_manipulation import basic_conversation, real_time_conversation
+from functions.ai_functions.old_gemini_manipulation import basic_conversation, real_time_conversation
 
 prompt_text = "Qual é o clima na cidade do Rio de Janeiro historicamente?"
 

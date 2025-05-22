@@ -2,6 +2,7 @@ import os
 import time
 import google.generativeai as genai
 from dotenv import load_dotenv
+from typing import List
 
 load_dotenv()
 
@@ -11,55 +12,71 @@ genai.configure(api_key=GEMINI_KEY)
 basic_model = genai.GenerativeModel('gemini-2.5-flash-preview-04-17')
 real_time_model = genai.GenerativeModel("gemini-1.5-flash")  # -> Modelo com suporte a streaming.
 
+# PROMPT_TEMPLATE = """
+# {role}
+#
+# Histórico:
+# {history}
+#
+# Mensagem atual:
+# {current}
+# """
 
-def generate_prompt(promp_text: str, historic: str = "Não consta.") -> str:
-    return f"""
-    Você é um agente responsável por auxiliar o usuário em suas duvidas sobre o clima, informações referente ao histórico dele sobre perguntas do clima e nada mais.
-    Interaja com o usuário baseado no histórico de mensagens abaixo.
-    Responda a mensagem atual do usuário.
-    {historic}
-    
-    Mensagem atual:
-    {promp_text}
-    """
+class GeminiAgent:
+    def __init__(self, prompt_build: str, agent_name: str, is_real_time_model: bool = False):
+        self.is_real_time_model: bool = is_real_time_model
+        self.prompt_build: str = prompt_build
+        self.agent_name: str = agent_name
+        self.historic: List[str] = []
 
+        if is_real_time_model:
+            self.agent_model: genai.GenerativeModel = real_time_model
+        else:
+            self.agent_model: genai.GenerativeModel = basic_model
 
-def basic_conversation(promp_text: str, historic: str) -> str:
-    prompt = generate_prompt(promp_text, historic)
+    def chat(self, user_input: str, streaming: bool = False) -> str | None:
+        prompt = self.generate_prompt(user_input)
 
-    # response = basic_model.generate_content(prompt)
-    # return response.text
+        try:
+            if streaming:
+                print("🧠 Gemini está digitando:\n")
+                response = self.agent_model.generate_content(prompt, stream=True)
+                for chunk in response:
+                    print(chunk.text, end='', flush=True)
+                    time.sleep(0.03)  # -> "Efeito" de digitando.
+                print("\n\n✅ Fim da resposta.")
+                return None
+            else:
+                response = self.agent_model.generate_content(prompt, stream=True)
+                response.resolve()
+                self.update_historic(user_input, response.text)
+                return response.text
 
-    response = basic_model.generate_content(prompt, stream=True)
-    response.resolve()
-    # Quando usamos o stream=True, a resposta (response) é um iterador de chunks, cada um com um pedaço do texto.
-    # O .resolve() percorre todos esses chunks internamente, concatena os textos e gera o conteúdo final completo.
-    # Usar stream=True com .resolve() é naturalmente mais rápido para se obter a resposta que o stream=False.
-    # É mais rápido em todos os cenários.
-    # • Tanto para conversa em tempo real (só é uma opção com o stream=True)
-    # • Quanto para apenas entregar a resposta final.
+        except Exception as e:
+            print(f"❌ Erro: {e}")
+            return None
 
-    print('-' * 30)
-    print(response)
-    print('-' * 30)
+    def update_historic(self, user_input: str, agent_response: str):
+        self.historic.append(f"Usuário: {user_input}")
+        self.historic.append(f"{self.agent_name}: {agent_response}")
 
-    return response.text
+    def generate_prompt(self, promp_text: str) -> str:
+        # return PROMPT_TEMPLATE.format(
+        #     role=self.prompt_build,
+        #     history=' | '.join(self.historic) if self.historic else 'Não consta.',
+        #     current=promp_text
+        # )
 
+        return f"""
+        {self.prompt_build}
 
-def real_time_conversation(prompt: str):
-    print("🧠 Gemini está digitando:\n")
+        Interaja com o usuário baseado no histórico de mensagens abaixo.
+        Responda a mensagem atual do usuário.
+        {' | '.join(self.historic[:10]) if len(self.historic) > 0 else 'Não consta.'}
 
-    try:
-        response = real_time_model.generate_content(generate_prompt(prompt), stream=True)
-
-        for chunk in response:
-            print(chunk.text, end='', flush=True)
-            time.sleep(0.03)  # Só pra dar um efeito "digitando".
-
-        print("\n\n✅ Fim da resposta.")
-
-    except Exception as e:
-        print(f"\n❌ Erro: {e}")
+        Mensagem atual:
+        {promp_text}
+        """
 
 
 def check_models():
@@ -69,18 +86,6 @@ def check_models():
 
 
 if __name__ == '__main__':
-    test_historic = """
-    Mensagem Usuário: Olá eu me chamo Teste! 
-    
-    Resposta do agente anterior: Olá, Teste!
-    Estou funcionando perfeitamente, obrigado por perguntar! 😊
-    Prazer em te conhecer! Como posso te ajudar hoje?"))
-    
-    Mensagem Usuário: Queria saber como esta o clima em Paris
-    
-    Resposta do agente anterior: 
-    Certo, Teste! Posso te informar sobre o clima em Paris agora.
-
-    Em Paris, a temperatura é de aproximadamente 15°C, com céu parcialmente nublado. A sensação térmica é similar. A umidade está em torno de 70% e o vento sopra fraco.
-    """
-    print(basic_conversation("Me diga como esta o clima nos lugares que eu costumo perguntar", test_historic))
+    weather_agent = GeminiAgent("Você é um agente responsável por fornecer apenas informações sobre o clima.", "WeatherAgent", False)
+    print(weather_agent.chat("Me diga a temperatura em Paris."))
+    print(weather_agent.historic)
