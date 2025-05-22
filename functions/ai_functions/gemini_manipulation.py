@@ -2,7 +2,8 @@ import os
 import time
 import google.generativeai as genai
 from dotenv import load_dotenv
-from typing import List
+from typing import List, Optional
+from functions.ai_functions.history_storage import HistoryStorage
 
 load_dotenv()
 
@@ -23,11 +24,12 @@ real_time_model = genai.GenerativeModel("gemini-1.5-flash")  # -> Modelo com sup
 # """
 
 class GeminiAgent:
-    def __init__(self, prompt_build: str, agent_name: str, is_real_time_model: bool = False):
+    def __init__(self, prompt_build: str, agent_name: str, is_real_time_model: bool = False, storage: Optional[HistoryStorage] = None):
         self.is_real_time_model: bool = is_real_time_model
         self.prompt_build: str = prompt_build
         self.agent_name: str = agent_name
-        self.historic: List[str] = []
+        self.storage: HistoryStorage = storage or HistoryStorage()
+        self.historic: List[str] = self.storage.load_history(agent_name)
 
         if is_real_time_model:
             self.agent_model: genai.GenerativeModel = real_time_model
@@ -43,9 +45,10 @@ class GeminiAgent:
                 response = self.agent_model.generate_content(prompt, stream=True)
                 for chunk in response:
                     print(chunk.text, end='', flush=True)
-                    time.sleep(0.03)  # -> "Efeito" de digitando.
+                    time.sleep(0.04)  # -> "Efeito" de digitando.
                 print("\n\n✅ Fim da resposta.")
-                return None
+                self.update_historic(user_input, response.text)
+                return response.text
             else:
                 response = self.agent_model.generate_content(prompt, stream=True)
                 response.resolve()
@@ -59,6 +62,7 @@ class GeminiAgent:
     def update_historic(self, user_input: str, agent_response: str):
         self.historic.append(f"Usuário: {user_input}")
         self.historic.append(f"{self.agent_name}: {agent_response}")
+        self.storage.save_history(self.agent_name, self.historic)
 
     def generate_prompt(self, promp_text: str) -> str:
         # return PROMPT_TEMPLATE.format(
@@ -86,6 +90,9 @@ def check_models():
 
 
 if __name__ == '__main__':
-    weather_agent = GeminiAgent("Você é um agente responsável por fornecer apenas informações sobre o clima.", "WeatherAgent", False)
-    print(weather_agent.chat("Me diga a temperatura em Paris."))
+    storage = HistoryStorage()
+    weather_agent = GeminiAgent("Você é um agente responsável por fornecer apenas informações sobre o clima.", "WeatherAgent", False, storage)
+    teste = weather_agent.chat("Me fale sobre o clima de Roma dos proximos 3 dias.", True)
+    print('-' * 30)
+    # print(teste)
     print(weather_agent.historic)

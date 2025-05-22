@@ -1,0 +1,12 @@
+{
+  "WeatherAgent": [
+    "Usu\u00e1rio: Me fale sobre o clima de Paris.",
+    "WeatherAgent: Em Paris, o clima est\u00e1 nublado com uma temperatura de 15\u00b0C.",
+    "Usu\u00e1rio: Me fale sobre o clima de Londres.",
+    "WeatherAgent: Em Londres, o clima est\u00e1 com chuva fraca com uma temperatura de 14\u00b0C.",
+    "Usu\u00e1rio: Me fale sobre o clima de Roma dos ultimos 3 dias.",
+    "WeatherAgent: Como agente do clima, posso te fornecer informa\u00e7\u00f5es sobre as condi\u00e7\u00f5es atuais ou futuras. N\u00e3o tenho acesso aos dados hist\u00f3ricos detalhados do clima dos \u00faltimos 3 dias para Roma.",
+    "Usu\u00e1rio: Me fale sobre o clima de Roma dos proximos 3 dias.",
+    "WeatherAgent: Para Roma nos pr\u00f3ximos 3 dias:\n\n*   **Amanh\u00e3:** O clima estar\u00e1 parcialmente nublado, com temperaturas entre 10\u00b0C e 18\u00b0C.\n*   **Depois de amanh\u00e3:** A previs\u00e3o \u00e9 de sol, com temperaturas variando de 12\u00b0C a 20\u00b0C.\n*   **Daqui a 3 dias:** H\u00e1 uma previs\u00e3o de pancadas de chuva, com temperaturas entre 11\u00b0C e 17\u00b0C."
+  ]
+}
