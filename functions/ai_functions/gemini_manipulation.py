@@ -167,7 +167,7 @@ class ComplexAgent(SimpleAgent):
         self.update_historic(user_input, final_text)
         return final_text
 
-    def __extract_function_calls(self, response_text: str) -> dict | None:
+    def __extract_function_calls(self, response_text: str) -> Optional[dict]:
         try:
             response_text = response_text.removeprefix('```json\n').removesuffix("\n```")
             response_text = response_text.replace("\n", "").replace("`", "").replace("´", "")
@@ -193,14 +193,17 @@ class ComplexAgent(SimpleAgent):
             return f"❌ Erro ao executar '{name}': {e}"
 
     def __generate_prompt_with_functions(self, promp_text: str) -> str:
+        import inspect
+
         formatted_history = "\n".join(
             f"{item['Data']} - Usuário: {item["Mensagem"]['Usuario']}\n{self.agent_name}: {item["Mensagem"][self.agent_name]}"
             for item in self.historic
         )
 
         function_list = "\n".join(
-            f"- {name}({', '.join(f.__code__.co_varnames[:f.__code__.co_argcount])})" for name, f in
-            self.functions.items())
+            f"- {name}{inspect.signature(f)}"
+            for name, f in self.functions.items()
+        )
 
         call_function_explanation = """
           {
@@ -253,10 +256,10 @@ if __name__ == '__main__':
         "pegar_clima": pegar_clima,
         "somar": somar
     }
-    test_complext = ComplexAgent("Você é um agente responsável por fornecer apenas informações sobre o clima e sobre soma de numeros.", "WeatherSumAgent", model_test, functions_test)
-    test_response = test_complext.chat_with_functions("Me fale quais foram as ultimas somas que eu pedi para voce fazer para mim.", True)
+    test_complex_agent  = ComplexAgent("Você é um agente responsável por fornecer apenas informações sobre o clima e sobre soma de numeros.", "WeatherSumAgent", model_test, functions_test)
+    test_response = test_complex_agent .chat_with_functions("Me fale sobre o clima de Brasilia atualmente. Também me diga quanto é 49+33", True)
     print()
     print('-' * 30)
     print(test_response)
     print('-' * 30)
-    print(test_complext.historic)
+    print(test_complex_agent .historic)

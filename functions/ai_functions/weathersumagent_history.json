@@ -27,6 +27,13 @@
         "Usuario": "Me fale quais foram as ultimas somas que eu pedi para voce fazer para mim.",
         "WeatherSumAgent": "Com certeza! Consultando nosso histórico, as últimas somas que você me pediu foram:\n\n*   73 + 15 = 88\n*   102 + 68 = 170\n*   22 + 18 = 40"
       }
+    },
+    {
+      "Data": "23/05/2025 13:41:26",
+      "Mensagem": {
+        "Usuario": "Me fale sobre o clima de Brasilia atualmente. Também me diga quanto é 49+33",
+        "WeatherSumAgent": "O clima em Brasília está Ensolarado com temperatura de 28°C. A soma de 49 e 33 é 82."
+      }
     }
   ]
 }
