@@ -1,7 +1,7 @@
 import base64
 
 
-def image_to_base64(caminho_imagem):
+def image_to_base64(caminho_imagem: str) -> str:
     """
     Converte uma imagem para uma string em base64.
 
@@ -18,5 +18,7 @@ def image_to_base64(caminho_imagem):
             return imagem_base64
     except FileNotFoundError:
         print(f"Arquivo não encontrado: {caminho_imagem}")
+        return ""
     except Exception as e:
         print(f"Erro ao converter imagem: {e}")
+        return ""

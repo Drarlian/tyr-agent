@@ -3,12 +3,12 @@ import json
 import base64
 import google.generativeai as genai
 from typing import List, Optional, Callable, final
-from functions.ai_functions.history_storage import HistoryStorage
+from functions.storage_functions.history_storage import HistoryStorage
 from datetime import datetime
 from functions.ai_functions.gemini_config import configure_gemini  # Configurando a conexão com Gemini.
 from io import BytesIO
 from PIL import Image, ImageFile
-from convert_image_to_base64 import image_to_base64
+from functions.utilities_functions.convert_image_to_base64 import image_to_base64
 
 
 class SimpleAgent:
