@@ -1,13 +1,59 @@
-# Ignore virtual environment directories
-.env
-.venv
+# Diretórios e arquivos gerados pelo Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
 
-# Ignore IDE configuration files
+# Arquivos temporários de editor/IDE
+*.swp
+*.bak
+*.tmp
+*.log
+*.DS_Store
+*.vscode/
 .idea/
 
-# Ignore __pycache__ directories
-**/__pycache__/
+# Ambientes virtuais
+venv/
+.venv
+.env/
+.env
+.envrc
 
-# Ignore temporary files
-*.tmp
-*.swp
+# Build / distribuição
+dist/
+build/
+*.egg-info/
+*.egg
+*.whl
+
+# Arquivos de testes e cobertura
+.coverage
+htmlcov/
+.tox/
+.pytest_cache/
+
+# Configuração local de ferramentas
+.mypy_cache/
+.cache/
+.pyre/
+.dmypy.json
+
+# Arquivos do Jupyter
+.ipynb_checkpoints/
+
+# Arquivos do VSCode
+.vscode/
+
+# Arquivos específicos de SO
+Thumbs.db
+ehthumbs.db
+desktop.ini
+
+# Arquivos de pacotes
+*.tar.gz
+*.zip
+
+# Arquivos de lock
+Pipfile.lock
+poetry.lock
