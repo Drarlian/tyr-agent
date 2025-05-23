@@ -1,0 +1,11 @@
+{
+  "WeatherSumAgent": [
+    {
+      "Data": "23/05/2025 10:54:43",
+      "Mensagem": {
+        "Usuario": "Me fale sobre o clima de Belo Horizonte atualmente. Tamb\u00e9m me diga quanto \u00e9 73+15",
+        "WeatherSumAgent": "O clima em Belo Horizonte est\u00e1 ensolarado com 28\u00b0C.\n\nQuanto \u00e0 sua pergunta sobre a soma, 73 + 15 \u00e9 igual a 88."
+      }
+    }
+  ]
+}

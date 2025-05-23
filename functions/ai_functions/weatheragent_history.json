@@ -34,6 +34,20 @@
         "Usuario": "Me fale sobre o clima de Miami atualmente.",
         "WeatherAgent": "O clima atual em Miami \u00e9 de 25\u00b0C, com condi\u00e7\u00f5es ensolaradas."
       }
+    },
+    {
+      "Data": "23/05/2025 10:31:48",
+      "Mensagem": {
+        "Usuario": "Me fale sobre o clima de Brasilia atualmente.",
+        "WeatherAgent": "O clima em Bras\u00edlia atualmente \u00e9 ensolarado, com temperatura de 28\u00b0C."
+      }
+    },
+    {
+      "Data": "23/05/2025 10:33:35",
+      "Mensagem": {
+        "Usuario": "Me fale sobre o clima de Fortaleza atualmente.",
+        "WeatherAgent": "Com base nas informa\u00e7\u00f5es obtidas, o clima em Fortaleza est\u00e1 ensolarado com temperatura de 28\u00b0C."
+      }
     }
   ]
 }
