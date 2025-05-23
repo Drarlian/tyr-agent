@@ -25,6 +25,9 @@ class SimpleAgent:
         self.MAX_HISTORY = min(max_history, self.MAX_ALLOWED_HISTORY)
         self.PROMPT_TEMPLATE = """
         {role}
+        
+        Você pode usar o histórico de conversas abaixo para responder perguntas relacionadas a interações anteriores com o usuário. 
+        Se o usuário perguntar sobre algo que já foi dito anteriormente, procure a informação no histórico.
 
         Histórico de Conversas:
         {history}
@@ -103,6 +106,9 @@ class ComplexAgent(SimpleAgent):
         Sempre que identificar que precisa executar uma ou mais funções para responder corretamente, gere uma resposta no formato JSON no seguinte formato:
         {call_function_explanation}
 
+        Você pode usar o histórico de conversas abaixo para responder perguntas relacionadas a interações anteriores com o usuário. 
+        Se o usuário perguntar sobre algo que já foi dito anteriormente, procure a informação no histórico.
+
         Histórico de Conversas:
         {history}
 
@@ -113,6 +119,7 @@ class ComplexAgent(SimpleAgent):
     def chat_with_functions(self, user_input: str, streaming: bool = False) -> str | None:
         # Primeira rodada: input original
         prompt = self.__generate_prompt_with_functions(user_input)
+
         response = self.agent_model.generate_content(prompt, stream=True)
         response.resolve()
         response_text = response.text.strip()
@@ -123,9 +130,11 @@ class ComplexAgent(SimpleAgent):
             self.update_historic(user_input, response_text)
             return response_text
 
+        print(func_calls["mensagem_ao_usuario"])
+
         # Executa múltiplas funções solicitadas
         results = {}
-        for call in func_calls:
+        for call in func_calls["functions_to_execute"]:
             result = self.__execute_function(call)
             results[call['function_name']] = result
 
@@ -134,7 +143,7 @@ class ComplexAgent(SimpleAgent):
         {self.prompt_build}
 
         O agente solicitou a execução das seguintes funções:
-        {json.dumps(results, indent=2)}
+        {json.dumps(results, indent=2, ensure_ascii=False)}
 
         Mensagem original do usuário:
         {user_input}
@@ -158,18 +167,16 @@ class ComplexAgent(SimpleAgent):
         self.update_historic(user_input, final_text)
         return final_text
 
-    def __extract_function_calls(self, response_text: str) -> list[dict]:
+    def __extract_function_calls(self, response_text: str) -> dict | None:
         try:
             response_text = response_text.removeprefix('```json\n').removesuffix("\n```")
             response_text = response_text.replace("\n", "").replace("`", "").replace("´", "")
             data = json.loads(response_text)
-            if isinstance(data, list):
-                return data
-            elif isinstance(data, dict):
-                return [data] if data.get("call_function") else []
-            return []
+            if isinstance(data, dict):
+                return data if data.get("call_functions") else []
+            return None
         except json.JSONDecodeError:
-            return []
+            return None
 
     def __execute_function(self, call: dict) -> str:
         name = call.get("function_name")
@@ -195,7 +202,19 @@ class ComplexAgent(SimpleAgent):
             f"- {name}({', '.join(f.__code__.co_varnames[:f.__code__.co_argcount])})" for name, f in
             self.functions.items())
 
-        call_function_explanation = '{"call_function": true, "function_name": "nome_da_funcao", "parameters": {"parametro_1": valor_parametro_1, "parametro_n": valor_parametro_n}, "mensagem_ao_usuario": "texto explicativo amigável"}'
+        call_function_explanation = """
+          {
+            "call_functions": true, 
+            "functions_to_execute": 
+            [
+              {
+                "function_name": "nome_da_funcao", 
+                "parameters": {"parametro_1": "valor_parametro_1", "parametro_n": "valor_parametro_n"}
+              },
+            ],
+            "mensagem_ao_usuario": "texto explicativo amigável"
+          }
+        """
 
         return self.PROMPT_TEMPLATE.format(
             role=self.prompt_build,
@@ -235,7 +254,9 @@ if __name__ == '__main__':
         "somar": somar
     }
     test_complext = ComplexAgent("Você é um agente responsável por fornecer apenas informações sobre o clima e sobre soma de numeros.", "WeatherSumAgent", model_test, functions_test)
-    test_complext.chat_with_functions("Me fale sobre o clima de Belo Horizonte atualmente. Também me diga quanto é 73+15", True)
+    test_response = test_complext.chat_with_functions("Me fale quais foram as ultimas somas que eu pedi para voce fazer para mim.", True)
     print()
+    print('-' * 30)
+    print(test_response)
     print('-' * 30)
     print(test_complext.historic)
