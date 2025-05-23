@@ -1,0 +1,26 @@
+[project]
+name = "intelligent-agent"
+version = "0.1.0"
+description = "Agente LLM com execução de funções, histórico persistente e suporte a Gemini."
+authors = [
+  { name = "Witor Oliveira", email = "witoredson@gmail.com" }
+]
+readme = "README.md"
+license = { file = "LICENSE" }
+requires-python = ">=3.9"
+dependencies = [
+  "google",
+  "google-generativeai",
+  "python-dotenv",
+  "pillow"
+]
+
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]

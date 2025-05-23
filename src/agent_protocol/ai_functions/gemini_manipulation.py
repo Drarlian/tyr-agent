@@ -2,13 +2,13 @@ import time
 import json
 import base64
 import google.generativeai as genai
-from typing import List, Optional, Callable, final
-from functions.storage_functions.history_storage import HistoryStorage
+from typing import List, Optional, Callable
+from agent_protocol.storage_functions.history_storage import HistoryStorage
 from datetime import datetime
-from functions.ai_functions.gemini_config import configure_gemini  # Configurando a conexão com Gemini.
+from agent_protocol.ai_functions.gemini_config import configure_gemini  # Configurando a conexão com Gemini.
 from io import BytesIO
 from PIL import Image, ImageFile
-from functions.utilities_functions.convert_image_to_base64 import image_to_base64
+from agent_protocol.utilities_functions.convert_image_to_base64 import image_to_base64
 
 
 class SimpleAgent:
@@ -36,12 +36,16 @@ class SimpleAgent:
         {current}
         """
 
-    def chat(self, user_input: str, streaming: bool = False) -> str | None:
+    def chat(self, user_input: str, streaming: bool = False, base64_files: Optional[List[str]] = None) -> str | None:
         try:
             prompt = self.generate_prompt(user_input)
 
             if not prompt:
                 raise Exception("[ERROR] - Erro ao gerar o prompt.")
+
+            if base64_files:
+                files: List[ImageFile] = [self.convert_base64_to_image(b64) for b64 in base64_files]
+                prompt = [prompt] + files[:10]
 
             if streaming:
                 print("🧠 Gemini está digitando:\n")
@@ -82,6 +86,20 @@ class SimpleAgent:
         except Exception as e:
             print(f'[ERROR] - Ocorreu um erro duração a atualizaão do histórico: {e}')
 
+    def convert_base64_to_image(self, base64_file: str) -> Optional[ImageFile]:
+        try:
+            if base64_file.startswith('data:image'):
+                base64_file = base64_file.split(',')[1]
+
+            bytes_image = base64.b64decode(base64_file)
+            buffer = BytesIO(bytes_image)
+            image = Image.open(buffer)
+
+            return image
+        except Exception as e:
+            print(f"[ERROR] - Erro ao converter base64 para imagem: {e}")
+            return None
+
     def generate_prompt(self, promp_text: str) -> str:
         try:
             formatted_history = "\n".join(
@@ -117,7 +135,7 @@ class ComplexAgent(SimpleAgent):
                 raise Exception("[ERROR] - Erro ao gerar o prompt.")
 
             if base64_files:
-                files: List[ImageFile] = [self.__convert_base64_to_image(b64) for b64 in base64_files]
+                files: List[ImageFile] = [self.convert_base64_to_image(b64) for b64 in base64_files]
                 prompt = [prompt] + files[:10]
 
             response = self.agent_model.generate_content(prompt, stream=True)
@@ -194,20 +212,6 @@ class ComplexAgent(SimpleAgent):
             return f"✅ Resultado da função '{name}': {result}"
         except Exception as e:
             return f"❌ Erro ao executar '{name}': {e}"
-
-    def __convert_base64_to_image(self, base64_file: str) -> Optional[ImageFile]:
-        try:
-            if base64_file.startswith('data:image'):
-                base64_file = base64_file.split(',')[1]
-
-            bytes_image = base64.b64decode(base64_file)
-            buffer = BytesIO(bytes_image)
-            image = Image.open(buffer)
-
-            return image
-        except Exception as e:
-            print(f"[ERROR] - Erro ao converter base64 para imagem: {e}")
-            return None
 
     def __generate_prompt_with_functions(self, promp_text: str) -> str:
         import inspect
@@ -312,10 +316,10 @@ if __name__ == '__main__':
     paths = ["boleto_teste1.jpg", "boleto_teste2.png", "boleto_teste3.png"]
     images = [image_to_base64(path) for path in paths]
 
-    # test_response = test_complex_agent_with_file.chat_with_functions(
-    #     "Me fale os valor somado de todos os boletos que eu já te mandei.", True, base64_files=images)
     test_response = test_complex_agent_with_file.chat_with_functions(
-        "Me fale os valor somado de todos os boletos que eu já te mandei.", True)
+        "Me fale os valor de todos os boletos que estou te enviando.", True, base64_files=images)
+    # test_response = test_complex_agent_with_file.chat_with_functions(
+    #     "Me fale os valor somado de todos os boletos que eu já te mandei.", True)
 
     print('-' * 100)
     print(test_response)
