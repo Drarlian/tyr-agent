@@ -1,5 +1,5 @@
 [project]
-name = "intelligent-agent"
+name = "agent-protocol"
 version = "0.1.0"
 description = "Agente LLM com execução de funções, histórico persistente e suporte a Gemini."
 authors = [
