@@ -9,20 +9,26 @@ class HistoryStorage:
                 json.dump({}, f, ensure_ascii=False)
 
     def save_history(self, agent_name: str, history: dict):
-        data = self.load_all()
+        try:
+            data = self.load_all()
 
-        if data.get(agent_name, False):
-            data[agent_name].append(history)
-        else:
-            data[agent_name] = [history]
+            if data.get(agent_name, False):
+                data[agent_name].append(history)
+            else:
+                data[agent_name] = [history]
 
-        with open(self.filename, "w", encoding="utf-8") as f:
-            json.dump(data, f, indent=2, ensure_ascii=False)
+            with open(self.filename, "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=2, ensure_ascii=False)
+        except Exception as e:
+            print(f"[ERROR] - Erro ao salvar histórico: {e}")
 
     def load_history(self, agent_name: str) -> list:
         data = self.load_all()
         return data.get(agent_name, [])
 
     def load_all(self):
-        with open(self.filename, "r", encoding="utf-8") as f:
-            return json.load(f)
+        try:
+            with open(self.filename, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except FileNotFoundError:
+            return {}
