@@ -1,0 +1,39 @@
+{
+  "WeatherAgent": [
+    {
+      "Data": "23/05/2025 00:00:30",
+      "Mensagem": {
+        "Usuario": "Me fale sobre o clima de Paris atualmente.",
+        "WeatherAgent": "O clima atual em Paris \u00e9 de 15\u00b0C, com condi\u00e7\u00f5es parcialmente nubladas."
+      }
+    },
+    {
+      "Data": "23/05/2025 00:00:48",
+      "Mensagem": {
+        "Usuario": "Me fale sobre o clima de Londres atualmente.",
+        "WeatherAgent": "O clima atual em Londres \u00e9 de 14\u00b0C, com condi\u00e7\u00f5es de chuva leve."
+      }
+    },
+    {
+      "Data": "23/05/2025 00:01:11",
+      "Mensagem": {
+        "Usuario": "Me fale sobre o clima do Rio de Janeiro atualmente.",
+        "WeatherAgent": "O clima atual no Rio de Janeiro \u00e9 de 28\u00b0C, com condi\u00e7\u00f5es ensolaradas."
+      }
+    },
+    {
+      "Data": "23/05/2025 00:01:28",
+      "Mensagem": {
+        "Usuario": "Me fale sobre o clima de Nova Iorque atualmente.",
+        "WeatherAgent": "O clima atual em Nova Iorque \u00e9 de 18\u00b0C, com condi\u00e7\u00f5es nubladas."
+      }
+    },
+    {
+      "Data": "23/05/2025 00:02:14",
+      "Mensagem": {
+        "Usuario": "Me fale sobre o clima de Miami atualmente.",
+        "WeatherAgent": "O clima atual em Miami \u00e9 de 25\u00b0C, com condi\u00e7\u00f5es ensolaradas."
+      }
+    }
+  ]
+}

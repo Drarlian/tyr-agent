@@ -8,9 +8,13 @@ class HistoryStorage:
             with open(self.filename, "w") as f:
                 json.dump({}, f)
 
-    def save_history(self, agent_name: str, history: list):
+    def save_history(self, agent_name: str, history: dict):
         data = self.load_all()
-        data[agent_name] = history
+
+        if data.get(agent_name, False):
+            data[agent_name].append(history)
+        else:
+            data[agent_name] = [history]
 
         with open(self.filename, "w") as f:
             json.dump(data, f, indent=2)
