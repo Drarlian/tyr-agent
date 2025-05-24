@@ -3,21 +3,21 @@ import json
 import base64
 import google.generativeai as genai
 from typing import List, Optional, Callable
-from agent_protocol.storage_functions.history_storage import HistoryStorage
+from tyr_agent.storage.interaction_history import InteractionHistory
 from datetime import datetime
-from agent_protocol.ai_functions.gemini_config import configure_gemini  # Configurando a conexão com Gemini.
+from tyr_agent.core.ai_config import configure_gemini
 from io import BytesIO
 from PIL import Image, ImageFile
-from agent_protocol.utilities_functions.convert_image_to_base64 import image_to_base64
+from tyr_agent.utils.image_utils import image_to_base64
 
 
 class SimpleAgent:
     MAX_ALLOWED_HISTORY = 20
 
-    def __init__(self, prompt_build: str, agent_name: str, model: genai.GenerativeModel, storage: Optional[HistoryStorage] = None, max_history: int = 20):
+    def __init__(self, prompt_build: str, agent_name: str, model: genai.GenerativeModel, storage: Optional[InteractionHistory] = None, max_history: int = 20):
         self.prompt_build: str = prompt_build
         self.agent_name: str = agent_name
-        self.storage: HistoryStorage = storage or HistoryStorage(f"{agent_name.lower()}_history.json")
+        self.storage: InteractionHistory = storage or InteractionHistory(f"{agent_name.lower()}_history.json")
         self.historic: List[dict] = self.storage.load_history(agent_name)
 
         self.agent_model: genai.GenerativeModel = model
@@ -120,7 +120,7 @@ class SimpleAgent:
 class ComplexAgent(SimpleAgent):
     MAX_ALLOWED_HISTORY = 20
 
-    def __init__(self, prompt_build: str, agent_name: str, model: genai.GenerativeModel, functions: Optional[dict[str, Callable]] = None, storage: Optional[HistoryStorage] = None, max_history: int = 20):
+    def __init__(self, prompt_build: str, agent_name: str, model: genai.GenerativeModel, functions: Optional[dict[str, Callable]] = None, storage: Optional[InteractionHistory] = None, max_history: int = 20):
         super().__init__(prompt_build, agent_name, model, storage, max_history)
         self.functions: dict[str, Callable] = functions or {}
 
@@ -275,21 +275,6 @@ class ComplexAgent(SimpleAgent):
             return ""
 
 
-def check_models():
-    models = genai.list_models()
-    for model in models:
-        print(model)
-
-
-# Exemplo de uso das funções
-def somar(nums = List[float]) -> float:
-    return sum(nums)
-
-
-def pegar_clima(cidade: str) -> str:
-    return f"Clima em {cidade}: Ensolarado 28°C"
-
-
 if __name__ == '__main__':
     configure_gemini()
     model_test = genai.GenerativeModel('gemini-2.5-flash-preview-04-17')
@@ -300,8 +285,8 @@ if __name__ == '__main__':
     # print(weather_agent.historic)
 
     functions_test = {
-        "pegar_clima": pegar_clima,
-        "somar": somar
+        "get_weather": lambda city: f"O clima de {city} é 28º",
+        "sum_numbers": lambda nums: f"A soma de {nums} é igual a {sum(nums)}",
     }
     # test_complex_agent  = ComplexAgent("Você é um agente responsável por fornecer apenas informações sobre o clima e sobre soma de numeros.", "WeatherSumAgent", model_test, functions_test)
     # test_response = test_complex_agent .chat_with_functions("Me fale sobre o clima de Brasilia atualmente. Também me diga quanto é 49+33", True)

@@ -1,7 +1,7 @@
 import json
 import os
 
-class HistoryStorage:
+class InteractionHistory:
     def __init__(self, filename: str = "conversation_history.json"):
         self.filename = filename
         if not os.path.exists(self.filename):
