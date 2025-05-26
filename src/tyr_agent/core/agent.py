@@ -1,15 +1,12 @@
-import time
 import json
 import base64
 import google.generativeai as genai
 from typing import List, Dict, Optional, Callable, Union
 from tyr_agent.entities.entities import ManagerCallManyAgents, AgentCallInfo
 from tyr_agent.storage.interaction_history import InteractionHistory
-from datetime import datetime
 from tyr_agent.core.ai_config import configure_gemini
 from io import BytesIO
 from PIL import Image, ImageFile
-# from tyr_agent.utils.image_utils import image_to_base64
 
 
 class SimpleAgent:
@@ -37,7 +34,7 @@ class SimpleAgent:
         {current}
         """
 
-    def chat(self, user_input: str, streaming: bool = False, base64_files: Optional[List[str]] = None, print_messages: bool = False) -> str | None:
+    async def chat(self, user_input: str, streaming: bool = False, base64_files: Optional[List[str]] = None, print_messages: bool = False) -> Optional[str]:
         try:
             prompt = self.generate_prompt(user_input)
 
@@ -48,30 +45,14 @@ class SimpleAgent:
                 files: List[ImageFile] = [self.convert_base64_to_image(b64) for b64 in base64_files]
                 prompt = [prompt] + files[:10]
 
-            if streaming:
-                if print_messages:
-                    print("🧠 Gemini está digitando:\n")
-                response = self.agent_model.generate_content(prompt, stream=True)
+            response = await self.agent_model.generate_content_async(prompt, stream=True)
+            await response.resolve()
+            final_text: str= response.text.strip()
+            self.update_historic(user_input, final_text)
 
-                final_text: str = ""
-                for chunk in response:
-                    if print_messages:
-                        print(chunk.text, end='', flush=True)
-                    final_text += chunk.text
-                    time.sleep(0.04)  # -> "Efeito" de digitando.
-
-                if print_messages:
-                    print("\n\n✅ Fim da resposta.")
-
-                self.update_historic(user_input, final_text)
-                return final_text
-            else:
-                response = self.agent_model.generate_content(prompt, stream=True)
-                response.resolve()
-                self.update_historic(user_input, response.text)
-                return response.text
+            return final_text
         except Exception as e:
-            print(f"❌ Erro: {e}")
+            print(f"❌ [SimpleAgent.chat] {type(e).__name__}: {e}")
             return None
 
     def update_historic(self, user_input: str, agent_response: str):
@@ -130,23 +111,21 @@ class ComplexAgent(SimpleAgent):
 
         self.PROMPT_TEMPLATE = ""
 
-    def chat_with_functions(self, user_input: str, streaming: bool = False, base64_files: Optional[List[str]] = None) -> str | None:
-        return self.chat(user_input, streaming, base64_files)
+    async def chat(self, user_input: str, streaming: bool = False, base64_files: Optional[List[str]] = None, print_messages: bool = False) -> str | None:
+        # Primeira rodada:
+        prompt = self.__generate_prompt_with_functions(user_input)
 
-    def chat(self, user_input: str, streaming: bool = False, base64_files: Optional[List[str]] = None, print_messages: bool = False) -> str | None:
+        if not prompt:
+            raise Exception("[ERROR] - Erro ao gerar o prompt.")
+
         try:
-            # Primeira rodada:
-            prompt = self.__generate_prompt_with_functions(user_input)
-
-            if not prompt:
-                raise Exception("[ERROR] - Erro ao gerar o prompt.")
 
             if base64_files:
                 files: List[ImageFile] = [self.convert_base64_to_image(b64) for b64 in base64_files]
                 prompt = [prompt] + files[:10]
 
-            response = self.agent_model.generate_content(prompt, stream=True)
-            response.resolve()
+            response = await self.agent_model.generate_content_async(prompt, stream=True)
+            await response.resolve()
             response_text = response.text.strip()
 
             func_calls = self.__extract_function_calls(response_text)
@@ -158,7 +137,7 @@ class ComplexAgent(SimpleAgent):
             if print_messages:
                 print(func_calls["mensagem_ao_usuario"])
 
-            # Executa múltiplas funções solicitadas
+            # Executa as múltiplas funções solicitadas:
             results = {}
             for call in func_calls["functions_to_execute"]:
                 result = self.__execute_function(call)
@@ -177,20 +156,10 @@ class ComplexAgent(SimpleAgent):
             Agora gere uma resposta final ao usuário com base nos resultados das funções.
             """
 
-            final_response = self.agent_model.generate_content(enriched_prompt, stream=streaming)
+            final_response = await self.agent_model.generate_content_async(enriched_prompt, stream=True)
+            await final_response.resolve()
+            final_text: str = final_response.text.strip()
 
-            if streaming:
-                final_text = ""
-                for chunk in final_response:
-                    if print_messages:
-                        print(chunk.text, end="", flush=True)
-                    final_text += chunk.text
-                    time.sleep(0.04)
-                self.update_historic(user_input, final_text)
-                return final_text.strip()
-
-            final_response.resolve()
-            final_text = final_response.text.strip()
             self.update_historic(user_input, final_text)
             return final_text
         except Exception as e:
@@ -299,7 +268,7 @@ class ManagerAgent:
         self.MAX_HISTORY: int = min(max_history, self.MAX_ALLOWED_HISTORY)
         self.PROMPT_TEMPLATE: str = ""
 
-    def chat(self, user_input: str) -> Optional[str]:
+    async def chat(self, user_input: str) -> Optional[str]:
         # Gera o prompt com base no input e nos agentes disponíveis
         prompt: str = self.generate_prompt(user_input)
 
@@ -308,8 +277,8 @@ class ManagerAgent:
             return None
 
         try:
-            response = self.agent_model.generate_content(prompt, stream=True)
-            response.resolve()
+            response = await self.agent_model.generate_content_async(prompt, stream=True)
+            await response.resolve()
             response_text: str = response.text.strip()
 
             extracted_agents = self.__extract_agent_call(response_text)
@@ -326,16 +295,15 @@ class ManagerAgent:
                 print(f"[ERRO] Nenhum dos agentes requisitados foi encontrado: {agentes_requisitados}")
                 return None
 
-            agents_response: List[str] = []
-            for delegated_agent in delegated_agents:
-                agent_response = delegated_agent["agent"].chat(delegated_agent["message"], streaming=True)
-                self.update_historic(user_input, agent_response, delegated_agent["agent"].agent_name)
-                agents_response.append(agent_response)
+            delegated_agents_name = " | ".join([agent["agent"].agent_name for agent in delegated_agents])
+            self.update_historic(user_input, "Direcionado ao(s) agente(s)", delegated_agents_name)
 
-            if len(delegated_agents) == 1:
-                return agents_response[0]
+            response_delegated_agents = await self.__execute_agents_calls(delegated_agents)
+
+            if len(response_delegated_agents) == 1:
+                return response_delegated_agents[0]
             else:
-                return self.generate_final_prompt(prompt, agents_response)
+                return await self.generate_final_prompt(prompt, response_delegated_agents)
 
         except Exception as e:
             print(f"[ERRO] Falha ao interpretar a resposta do manager: {e}")
@@ -369,6 +337,36 @@ class ManagerAgent:
         except Exception as e:
             print(f"[ERROR] - Falha ao encontrar o agente responsável: {e}")
             return []
+
+    async def __execute_agents_calls(self, delegated_agents: List[AgentCallInfo]) -> List[str]:
+        # agents_response: List[str] = []
+        # for agent_info in delegated_agents:
+        #     response = await agent_info["agent"].chat(agent_info["message"], streaming=True)
+        #     agents_response.append(f"{agent_info["agent"].agent_name}: {response}")
+        #     self.update_historic(agent_info["message"], response, agent_info["agent"].agent_name)
+
+        # Execução paralela dos agentes:
+        coroutines = [
+            delegated_agent["agent"].chat(delegated_agent["message"], streaming=True)
+            for delegated_agent in delegated_agents
+        ]
+
+        results = await asyncio.gather(*coroutines, return_exceptions=True)
+
+        agents_response: List[str] = []
+
+        for agent_info, result in zip(delegated_agents, results):
+            agent_name = agent_info["agent"].agent_name
+
+            if isinstance(result, Exception):
+                print(f"[ERRO] Agente '{agent_name}' falhou: {type(result).__name__} - {result}")
+                agents_response.append(f"{agent_name}: [Erro ao gerar resposta]")
+            else:
+                if isinstance(result, str):
+                    self.update_historic(agent_info["message"], result, agent_name)
+                    agents_response.append(f"{agent_name}: {result}")
+
+        return agents_response
 
     def update_historic(self, user_input: str, agent_response: str, agent_name: str):
         try:
@@ -453,7 +451,7 @@ Histórico de Conversas:
             print(f'[ERROR] - Ocorreu um erro durante a geração do prompt: {e}')
             return ""
 
-    def generate_final_prompt(self, prompt_text: str, agents_response: List[str]) -> str:
+    async def generate_final_prompt(self, prompt_text: str, agents_response: List[str]) -> str:
         try:
             combined = "\n".join(agents_response)
             prompt = f"""
@@ -469,8 +467,8 @@ Os seguintes agentes responderam individualmente:
 
 Com base nessas respostas, gere uma única resposta unificada e natural para o usuário.
         """
-            response = self.agent_model.generate_content(prompt, stream=True)
-            response.resolve()
+            response = await self.agent_model.generate_content_async(prompt, stream=True)
+            await response.resolve()
             return response.text.strip()
 
         except Exception as e:
@@ -479,14 +477,23 @@ Com base nessas respostas, gere uma única resposta unificada e natural para o u
 
 
 if __name__ == '__main__':
+    import asyncio
+    from datetime import datetime
+
+    inicio = datetime.now()
+
     configure_gemini()
     model_test = genai.GenerativeModel('gemini-2.5-flash-preview-04-17')
     weather_agent = SimpleAgent("Você é um agente responsável por fornecer apenas informações sobre o clima.", "WeatherAgent", model_test)
+    # response_test = asyncio.run(weather_agent.chat("Qual o clima atualmente no São Paulo?"))
+    # print(response_test)
 
     functions_test = {
         "sum_numbers": lambda nums: f"A soma de {nums} é igual a {sum(nums)}",
     }
-    sum_agent  = ComplexAgent("Você é um agente responsável por fornecer apenas informações de soma de números.", "SumAgent", model_test, functions_test)
+    sum_agent = ComplexAgent("Você é um agente responsável por fornecer apenas informações de soma de números.", "SumAgent", model_test, functions_test)
+    # response_test = asyncio.run(sum_agent.chat("Quanto é 10+20?"))
+    # print(response_test)
 
     manager = ManagerAgent(
         prompt_build="",
@@ -495,5 +502,12 @@ if __name__ == '__main__':
         agents={"clima": weather_agent, "soma": sum_agent},
     )
 
-    response_test = manager.chat("Qual é a temperatura atual de Salvador? E quanto é 15+9?")
+    response_test = asyncio.run(manager.chat("Qual é a temperatura atual de Fortaleza? E quanto é 87+23?"))
     print(response_test)
+
+    fim = datetime.now()
+
+    print(f"Tempo Percorrido: {fim-inicio}")
+
+    # Tempo Percorrido com pool: 0:00:09.265001 | Tempo Percorrido: 0:00:15.954875 | Tempo Percorrido: 0:00:10.745561
+    # Tempo Percorrido sem pool: 0:00:14.454556 | Tempo Percorrido: 0:00:11.398759 | Tempo Percorrido: 0:00:12.940998
