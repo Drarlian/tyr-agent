@@ -3,12 +3,13 @@ import json
 import base64
 import google.generativeai as genai
 from typing import List, Dict, Optional, Callable, Union
+from tyr_agent.entities.entities import ManagerCallManyAgents, AgentCallInfo
 from tyr_agent.storage.interaction_history import InteractionHistory
 from datetime import datetime
 from tyr_agent.core.ai_config import configure_gemini
 from io import BytesIO
 from PIL import Image, ImageFile
-from tyr_agent.utils.image_utils import image_to_base64
+# from tyr_agent.utils.image_utils import image_to_base64
 
 
 class SimpleAgent:
@@ -36,7 +37,7 @@ class SimpleAgent:
         {current}
         """
 
-    def chat(self, user_input: str, streaming: bool = False, base64_files: Optional[List[str]] = None) -> str | None:
+    def chat(self, user_input: str, streaming: bool = False, base64_files: Optional[List[str]] = None, print_messages: bool = False) -> str | None:
         try:
             prompt = self.generate_prompt(user_input)
 
@@ -48,16 +49,19 @@ class SimpleAgent:
                 prompt = [prompt] + files[:10]
 
             if streaming:
-                print("🧠 Gemini está digitando:\n")
+                if print_messages:
+                    print("🧠 Gemini está digitando:\n")
                 response = self.agent_model.generate_content(prompt, stream=True)
 
                 final_text: str = ""
                 for chunk in response:
-                    print(chunk.text, end='', flush=True)
+                    if print_messages:
+                        print(chunk.text, end='', flush=True)
                     final_text += chunk.text
                     time.sleep(0.04)  # -> "Efeito" de digitando.
 
-                print("\n\n✅ Fim da resposta.")
+                if print_messages:
+                    print("\n\n✅ Fim da resposta.")
 
                 self.update_historic(user_input, final_text)
                 return final_text
@@ -100,7 +104,7 @@ class SimpleAgent:
             print(f"[ERROR] - Erro ao converter base64 para imagem: {e}")
             return None
 
-    def generate_prompt(self, promp_text: str) -> str:
+    def generate_prompt(self, prompt_text: str) -> str:
         try:
             formatted_history = "\n".join(
                 f"{item['Data']} - Usuário: {item['Mensagem']['Usuario']}\n{self.agent_name}: {item['Mensagem'][self.agent_name]}"
@@ -110,7 +114,7 @@ class SimpleAgent:
             return self.PROMPT_TEMPLATE.format(
                 role=self.prompt_build,
                 history=formatted_history if self.historic else 'Não consta.',
-                current=promp_text
+                current=prompt_text
             )
         except Exception as e:
             print(f'[ERROR] - Ocorreu um erro durante a geração do prompt: {e}')
@@ -129,7 +133,7 @@ class ComplexAgent(SimpleAgent):
     def chat_with_functions(self, user_input: str, streaming: bool = False, base64_files: Optional[List[str]] = None) -> str | None:
         return self.chat(user_input, streaming, base64_files)
 
-    def chat(self, user_input: str, streaming: bool = False, base64_files: Optional[List[str]] = None) -> str | None:
+    def chat(self, user_input: str, streaming: bool = False, base64_files: Optional[List[str]] = None, print_messages: bool = False) -> str | None:
         try:
             # Primeira rodada:
             prompt = self.__generate_prompt_with_functions(user_input)
@@ -151,7 +155,8 @@ class ComplexAgent(SimpleAgent):
                 self.update_historic(user_input, response_text)
                 return response_text
 
-            print(func_calls["mensagem_ao_usuario"])
+            if print_messages:
+                print(func_calls["mensagem_ao_usuario"])
 
             # Executa múltiplas funções solicitadas
             results = {}
@@ -177,7 +182,8 @@ class ComplexAgent(SimpleAgent):
             if streaming:
                 final_text = ""
                 for chunk in final_response:
-                    print(chunk.text, end="", flush=True)
+                    if print_messages:
+                        print(chunk.text, end="", flush=True)
                     final_text += chunk.text
                     time.sleep(0.04)
                 self.update_historic(user_input, final_text)
@@ -216,7 +222,7 @@ class ComplexAgent(SimpleAgent):
         except Exception as e:
             return f"❌ Erro ao executar '{name}': {e}"
 
-    def __generate_prompt_with_functions(self, promp_text: str) -> str:
+    def __generate_prompt_with_functions(self, prompt_text: str) -> str:
         import inspect
 
         try:
@@ -267,7 +273,7 @@ class ComplexAgent(SimpleAgent):
             {formatted_history if formatted_history else "Não Consta."}
     
             Mensagem atual:
-            {promp_text}
+            {prompt_text}
             """
 
             final_prompt_template = first_prompt_template + second_prompt_template + third_prompt_template
@@ -295,36 +301,47 @@ class ManagerAgent:
 
     def chat(self, user_input: str) -> Optional[str]:
         # Gera o prompt com base no input e nos agentes disponíveis
-        prompt = self.generate_prompt(user_input)
+        prompt: str = self.generate_prompt(user_input)
+
+        if not prompt:
+            print(f"[ERRO] Não foi possível montar o prompt.")
+            return None
 
         try:
             response = self.agent_model.generate_content(prompt, stream=True)
             response.resolve()
-            response_text = response.text.strip()
+            response_text: str = response.text.strip()
 
-            agent_call = self.__extract_agent_call(response_text)
+            extracted_agents = self.__extract_agent_call(response_text)
 
-            if not agent_call:
+            if not extracted_agents:
                 self.update_historic(user_input, response_text, self.agent_name)
                 return response_text
 
-            # Encontrando o Agente solicitado:
-            agent, message = self.__find_correct_agent(agent_call)
+            # Encontrando os Agentes solicitados:
+            delegated_agents = self.__find_correct_agents(extracted_agents)
 
-            if agent is None:
-                print(f"[ERRO] Agente '{agent_call.get('agent_to_call')}' não foi encontrado.")
+            if len(delegated_agents) == 0:
+                agentes_requisitados = extracted_agents if isinstance(extracted_agents, str) else json.dumps(extracted_agents, ensure_ascii=False)
+                print(f"[ERRO] Nenhum dos agentes requisitados foi encontrado: {agentes_requisitados}")
                 return None
 
-            agent_response = agent.chat(message, streaming=True)
+            agents_response: List[str] = []
+            for delegated_agent in delegated_agents:
+                agent_response = delegated_agent["agent"].chat(delegated_agent["message"], streaming=True)
+                self.update_historic(user_input, agent_response, delegated_agent["agent"].agent_name)
+                agents_response.append(agent_response)
 
-            self.update_historic(user_input, agent_response, agent.agent_name)
-            return agent_response
+            if len(delegated_agents) == 1:
+                return agents_response[0]
+            else:
+                return self.generate_final_prompt(prompt, agents_response)
 
         except Exception as e:
             print(f"[ERRO] Falha ao interpretar a resposta do manager: {e}")
             return None
 
-    def __extract_agent_call(self, response_text: str) -> Union[Dict[str, str], None]:
+    def __extract_agent_call(self, response_text: str) -> Optional[ManagerCallManyAgents]:
         try:
             text_cleaned = (
                 response_text.removeprefix("```json\n").removesuffix("\n```").replace("\n", "")
@@ -332,25 +349,26 @@ class ManagerAgent:
             )
 
             data = json.loads(text_cleaned)
-            if isinstance(data, dict) and "agent_to_call" in data and "agent_message" in data:
+            if isinstance(data, dict) and "call_agents" in data and "agents_to_call" in data:
                 return data
             return None
         except json.JSONDecodeError:
             return None
 
-    def __find_correct_agent(self, agent_call: Dict[str, str]) -> tuple[Union[SimpleAgent, ComplexAgent, None], str]:
+    def __find_correct_agents(self, agents_to_call: ManagerCallManyAgents) -> List[AgentCallInfo]:
         try:
-            agent_name = agent_call.get("agent_to_call")
-            message = agent_call.get("agent_message")
-
-            if agent_name not in self.agents:
-                raise Exception("Erro ao procurar o agente correspondente.")
+            agents = []
+            for agent in agents_to_call.get("agents_to_call", []):
+                if agent.get("agent_to_call", "") not in self.agents.keys():
+                    raise Exception("Erro ao procurar o agente correspondente.")
+                else:
+                    agents.append({"agent": self.agents[agent.get("agent_to_call")], "message": agent.get("agent_message")})
 
             # Encontrando o Agente solicitado:
-            return self.agents[agent_name], message
+            return agents
         except Exception as e:
             print(f"[ERROR] - Falha ao encontrar o agente responsável: {e}")
-            return None, ""
+            return []
 
     def update_historic(self, user_input: str, agent_response: str, agent_name: str):
         try:
@@ -368,7 +386,7 @@ class ManagerAgent:
         except Exception as e:
             print(f'[ERROR] - Ocorreu um erro duração a atualizaão do histórico: {e}')
 
-    def generate_prompt(self, promp_text: str) -> str:
+    def generate_prompt(self, prompt_text: str) -> str:
         try:
             formatted_history = "\n\n".join(
                 f"{item['Data']} - Usuário: {item['Mensagem'].get('Usuario', '')}\n"
@@ -383,27 +401,45 @@ class ManagerAgent:
             formatted_agents = "\n".join(f"Nome do Agente: {agent_name} - Definição do Agente: {agent.prompt_build}" for agent_name, agent in self.agents.items())
 
             call_agent_explanation = """
-Com base na descrição dos agentes, decida qual deles é o mais apropriado para responder esta pergunta.
-Caso queira chamar um agente responda APENAS com um JSON no formato:
+Com base na descrição dos agentes, decida se precisa chamar 0, 1 ou mais agentes.
+Para chamar algum agente responda APENAS com um JSON no formato:
 
 {
-  "agent_to_call": "<nome_do_agente>",
-  "agent_message": "<mensagem que deve ser enviada ao agente>"
+    "call_agents": true,
+    "agents_to_call":
+        [
+            {
+                "agent_to_call": "<nome_do_agente>",
+                "agent_message": "<mensagem que deve ser enviada ao agente>"
+            },
+            ...
+        ],
 }
             """
 
             full_prompt = f"""
-Você é um agente gerente que tem sob sua responsabilidade os seguintes agentes especializados:
+Você é um agente gerente responsável por coordenar uma equipe de agentes especializados. Cada agente possui uma função bem definida, e você deve delegar partes da pergunta do usuário para o(s) agente(s) mais adequados.
+
+Abaixo está a descrição dos agentes disponíveis:
 
 {formatted_agents}
 
-O usuário enviou a seguinte pergunta:
+O usuário fez a seguinte pergunta:
 
-"{promp_text}"
+"{prompt_text}"
+
+Sua tarefa é:
+- Analisar a pergunta do usuário.
+- Dividir a pergunta em partes, se necessário.
+- Escolher o(s) agente(s) corretos para cada parte.
+- Informar qual mensagem deve ser enviada a cada agente.
 
 {call_agent_explanation}
 
-Caso nenhum agente pareça corresponder a mensagem, responda você mesmo.
+**Importante:**
+- Se a pergunta do usuário puder ser dividida entre vários agentes, crie um item para cada agente.
+- Se apenas um agente for necessário, retorne o JSON contendo apenas um agente.
+- Se nenhum agente for adequado, responda diretamente você mesmo com um texto comum (sem JSON).
 
 Você pode usar o histórico de conversas abaixo para responder perguntas relacionadas a interações anteriores com o usuário. 
 Se o usuário perguntar sobre algo que já foi dito anteriormente, procure a informação no histórico.
@@ -416,6 +452,30 @@ Histórico de Conversas:
         except Exception as e:
             print(f'[ERROR] - Ocorreu um erro durante a geração do prompt: {e}')
             return ""
+
+    def generate_final_prompt(self, prompt_text: str, agents_response: List[str]) -> str:
+        try:
+            combined = "\n".join(agents_response)
+            prompt = f"""
+Você é um agente gerente que tem sob sua responsabilidade alguns agentes especializados.
+            
+O usuário fez a seguinte pergunta:
+
+"{prompt_text}"
+
+Os seguintes agentes responderam individualmente:
+
+{combined}
+
+Com base nessas respostas, gere uma única resposta unificada e natural para o usuário.
+        """
+            response = self.agent_model.generate_content(prompt, stream=True)
+            response.resolve()
+            return response.text.strip()
+
+        except Exception as e:
+            print(f"[ERRO] - Falha ao gerar resposta final do Manager: {e}")
+            return "\n".join(agents_response)
 
 
 if __name__ == '__main__':
@@ -435,5 +495,5 @@ if __name__ == '__main__':
         agents={"clima": weather_agent, "soma": sum_agent},
     )
 
-    response_test = manager.chat("Qual é a temperatura atual de São Paulo?")
+    response_test = manager.chat("Qual é a temperatura atual de Salvador? E quanto é 15+9?")
     print(response_test)
