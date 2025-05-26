@@ -293,7 +293,7 @@ class ManagerAgent:
         self.MAX_HISTORY: int = min(max_history, self.MAX_ALLOWED_HISTORY)
         self.PROMPT_TEMPLATE: str = ""
 
-    def chat(self, user_input: str) -> str | None:
+    def chat(self, user_input: str) -> Optional[str]:
         # Gera o prompt com base no input e nos agentes disponíveis
         prompt = self.generate_prompt(user_input)
 
@@ -311,13 +311,18 @@ class ManagerAgent:
             # Encontrando o Agente solicitado:
             agent, message = self.__find_correct_agent(agent_call)
 
-            agent_response = agent.chat(message)
+            if agent is None:
+                print(f"[ERRO] Agente '{agent_call.get('agent_to_call')}' não foi encontrado.")
+                return None
+
+            agent_response = agent.chat(message, streaming=True)
 
             self.update_historic(user_input, agent_response, agent.agent_name)
             return agent_response
 
         except Exception as e:
-            return f"[ERRO] Falha ao interpretar a resposta do manager: {e}"
+            print(f"[ERRO] Falha ao interpretar a resposta do manager: {e}")
+            return None
 
     def __extract_agent_call(self, response_text: str) -> Union[Dict[str, str], None]:
         try:
@@ -390,7 +395,7 @@ Caso queira chamar um agente responda APENAS com um JSON no formato:
             full_prompt = f"""
 Você é um agente gerente que tem sob sua responsabilidade os seguintes agentes especializados:
 
-"{formatted_agents}"
+{formatted_agents}
 
 O usuário enviou a seguinte pergunta:
 
