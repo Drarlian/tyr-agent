@@ -2,7 +2,7 @@ import time
 import json
 import base64
 import google.generativeai as genai
-from typing import List, Optional, Callable
+from typing import List, Dict, Optional, Callable, Union
 from tyr_agent.storage.interaction_history import InteractionHistory
 from datetime import datetime
 from tyr_agent.core.ai_config import configure_gemini
@@ -127,6 +127,9 @@ class ComplexAgent(SimpleAgent):
         self.PROMPT_TEMPLATE = ""
 
     def chat_with_functions(self, user_input: str, streaming: bool = False, base64_files: Optional[List[str]] = None) -> str | None:
+        return self.chat(user_input, streaming, base64_files)
+
+    def chat(self, user_input: str, streaming: bool = False, base64_files: Optional[List[str]] = None) -> str | None:
         try:
             # Primeira rodada:
             prompt = self.__generate_prompt_with_functions(user_input)
@@ -275,36 +278,157 @@ class ComplexAgent(SimpleAgent):
             return ""
 
 
+class ManagerAgent:
+    MAX_ALLOWED_HISTORY = 100
+
+    def __init__(self, prompt_build: str, agent_name: str, model: genai.GenerativeModel, agents: Dict[str, Union[SimpleAgent, ComplexAgent]], storage: Optional[InteractionHistory] = None, max_history: int = 100):
+        self.prompt_build: str = prompt_build
+        self.agent_name: str = agent_name
+        self.agents: Dict[str, Union[SimpleAgent, ComplexAgent]] = agents
+        self.storage: InteractionHistory = storage or InteractionHistory(f"{agent_name.lower()}_history.json")
+        self.historic: List[dict] = self.storage.load_history(agent_name)
+
+        self.agent_model: genai.GenerativeModel = model
+
+        self.MAX_HISTORY: int = min(max_history, self.MAX_ALLOWED_HISTORY)
+        self.PROMPT_TEMPLATE: str = ""
+
+    def chat(self, user_input: str) -> str | None:
+        # Gera o prompt com base no input e nos agentes disponíveis
+        prompt = self.generate_prompt(user_input)
+
+        try:
+            response = self.agent_model.generate_content(prompt, stream=True)
+            response.resolve()
+            response_text = response.text.strip()
+
+            agent_call = self.__extract_agent_call(response_text)
+
+            if not agent_call:
+                self.update_historic(user_input, response_text, self.agent_name)
+                return response_text
+
+            # Encontrando o Agente solicitado:
+            agent, message = self.__find_correct_agent(agent_call)
+
+            agent_response = agent.chat(message)
+
+            self.update_historic(user_input, agent_response, agent.agent_name)
+            return agent_response
+
+        except Exception as e:
+            return f"[ERRO] Falha ao interpretar a resposta do manager: {e}"
+
+    def __extract_agent_call(self, response_text: str) -> Union[Dict[str, str], None]:
+        try:
+            text_cleaned = (
+                response_text.removeprefix("```json\n").removesuffix("\n```").replace("\n", "")
+                .replace("`", "").replace("´", "").strip()
+            )
+
+            data = json.loads(text_cleaned)
+            if isinstance(data, dict) and "agent_to_call" in data and "agent_message" in data:
+                return data
+            return None
+        except json.JSONDecodeError:
+            return None
+
+    def __find_correct_agent(self, agent_call: Dict[str, str]) -> tuple[Union[SimpleAgent, ComplexAgent, None], str]:
+        try:
+            agent_name = agent_call.get("agent_to_call")
+            message = agent_call.get("agent_message")
+
+            if agent_name not in self.agents:
+                raise Exception("Erro ao procurar o agente correspondente.")
+
+            # Encontrando o Agente solicitado:
+            return self.agents[agent_name], message
+        except Exception as e:
+            print(f"[ERROR] - Falha ao encontrar o agente responsável: {e}")
+            return None, ""
+
+    def update_historic(self, user_input: str, agent_response: str, agent_name: str):
+        try:
+            actual_conversation = {
+                "Data": datetime.now().strftime("%d/%m/%Y %H:%M:%S"),
+                "Mensagem": {
+                    "Usuario": user_input,
+                    agent_name: agent_response,
+                }
+            }
+
+            self.historic.append(actual_conversation)
+            self.historic = self.historic[-self.MAX_HISTORY:]  # -> Mantendo apenas os N itens no histórico.
+            self.storage.save_history(self.agent_name, actual_conversation)
+        except Exception as e:
+            print(f'[ERROR] - Ocorreu um erro duração a atualizaão do histórico: {e}')
+
+    def generate_prompt(self, promp_text: str) -> str:
+        try:
+            formatted_history = "\n\n".join(
+                f"{item['Data']} - Usuário: {item['Mensagem'].get('Usuario', '')}\n"
+                + "\n".join(
+                    f"{agent_name}: {resposta}"
+                    for agent_name, resposta in item["Mensagem"].items()
+                    if agent_name != "Usuario"
+                )
+                for item in self.historic
+            )
+
+            formatted_agents = "\n".join(f"Nome do Agente: {agent_name} - Definição do Agente: {agent.prompt_build}" for agent_name, agent in self.agents.items())
+
+            call_agent_explanation = """
+Com base na descrição dos agentes, decida qual deles é o mais apropriado para responder esta pergunta.
+Caso queira chamar um agente responda APENAS com um JSON no formato:
+
+{
+  "agent_to_call": "<nome_do_agente>",
+  "agent_message": "<mensagem que deve ser enviada ao agente>"
+}
+            """
+
+            full_prompt = f"""
+Você é um agente gerente que tem sob sua responsabilidade os seguintes agentes especializados:
+
+"{formatted_agents}"
+
+O usuário enviou a seguinte pergunta:
+
+"{promp_text}"
+
+{call_agent_explanation}
+
+Caso nenhum agente pareça corresponder a mensagem, responda você mesmo.
+
+Você pode usar o histórico de conversas abaixo para responder perguntas relacionadas a interações anteriores com o usuário. 
+Se o usuário perguntar sobre algo que já foi dito anteriormente, procure a informação no histórico.
+
+Histórico de Conversas:
+{formatted_history if formatted_history else "Não Consta."}
+            """
+
+            return full_prompt
+        except Exception as e:
+            print(f'[ERROR] - Ocorreu um erro durante a geração do prompt: {e}')
+            return ""
+
+
 if __name__ == '__main__':
     configure_gemini()
     model_test = genai.GenerativeModel('gemini-2.5-flash-preview-04-17')
-    # weather_agent = SimpleAgent("Você é um agente responsável por fornecer apenas informações sobre o clima.", "WeatherAgent", model_test)
-    # teste = weather_agent.chat("Me fale sobre o clima de Miami atualmente.", True)
-    # print('-' * 30)
-    # print(teste)
-    # print(weather_agent.historic)
+    weather_agent = SimpleAgent("Você é um agente responsável por fornecer apenas informações sobre o clima.", "WeatherAgent", model_test)
 
     functions_test = {
-        "get_weather": lambda city: f"O clima de {city} é 28º",
         "sum_numbers": lambda nums: f"A soma de {nums} é igual a {sum(nums)}",
     }
-    # test_complex_agent  = ComplexAgent("Você é um agente responsável por fornecer apenas informações sobre o clima e sobre soma de numeros.", "WeatherSumAgent", model_test, functions_test)
-    # test_response = test_complex_agent .chat_with_functions("Me fale sobre o clima de Brasilia atualmente. Também me diga quanto é 49+33", True)
-    # print()
-    # print('-' * 30)
-    # print(test_response)
-    # print('-' * 30)
-    # print(test_complex_agent .historic)
+    sum_agent  = ComplexAgent("Você é um agente responsável por fornecer apenas informações de soma de números.", "SumAgent", model_test, functions_test)
 
-    test_complex_agent_with_file = ComplexAgent("Você é um agente responsável apenas por analisar boletos e fornecer informações detalhadas sobre eles.", "BankingAgent", model_test, functions=functions_test)
+    manager = ManagerAgent(
+        prompt_build="",
+        agent_name="ManagerAgent1",
+        model=model_test,
+        agents={"clima": weather_agent, "soma": sum_agent},
+    )
 
-    paths = ["boleto_teste1.jpg", "boleto_teste2.png", "boleto_teste3.png"]
-    images = [image_to_base64(path) for path in paths]
-
-    test_response = test_complex_agent_with_file.chat_with_functions(
-        "Me fale os valor de todos os boletos que estou te enviando.", True, base64_files=images)
-    # test_response = test_complex_agent_with_file.chat_with_functions(
-    #     "Me fale os valor somado de todos os boletos que eu já te mandei.", True)
-
-    print('-' * 100)
-    print(test_response)
+    response_test = manager.chat("Qual é a temperatura atual de São Paulo?")
+    print(response_test)
