@@ -36,7 +36,7 @@ class SimpleAgent:
 
     async def chat(self, user_input: str, streaming: bool = False, base64_files: Optional[List[str]] = None, print_messages: bool = False) -> Optional[str]:
         try:
-            prompt = self.generate_prompt(user_input)
+            prompt = self.__generate_prompt(user_input)
 
             if not prompt:
                 raise Exception("[ERROR] - Erro ao gerar o prompt.")
@@ -48,14 +48,30 @@ class SimpleAgent:
             response = await self.agent_model.generate_content_async(prompt, stream=True)
             await response.resolve()
             final_text: str= response.text.strip()
-            self.update_historic(user_input, final_text)
+            self._update_historic(user_input, final_text)
 
             return final_text
         except Exception as e:
             print(f"❌ [SimpleAgent.chat] {type(e).__name__}: {e}")
             return None
 
-    def update_historic(self, user_input: str, agent_response: str):
+    def __generate_prompt(self, prompt_text: str) -> str:
+        try:
+            formatted_history = "\n".join(
+                f"{item['Data']} - Usuário: {item['Mensagem']['Usuario']}\n{self.agent_name}: {item['Mensagem'][self.agent_name]}"
+                for item in self.historic
+            )
+
+            return self.PROMPT_TEMPLATE.format(
+                role=self.prompt_build,
+                history=formatted_history if self.historic else 'Não consta.',
+                current=prompt_text
+            )
+        except Exception as e:
+            print(f'[ERROR] - Ocorreu um erro durante a geração do prompt: {e}')
+            return ""
+
+    def _update_historic(self, user_input: str, agent_response: str):
         try:
             actual_conversation = {
                 "Data": datetime.now().strftime("%d/%m/%Y %H:%M:%S"),
@@ -84,22 +100,6 @@ class SimpleAgent:
         except Exception as e:
             print(f"[ERROR] - Erro ao converter base64 para imagem: {e}")
             return None
-
-    def generate_prompt(self, prompt_text: str) -> str:
-        try:
-            formatted_history = "\n".join(
-                f"{item['Data']} - Usuário: {item['Mensagem']['Usuario']}\n{self.agent_name}: {item['Mensagem'][self.agent_name]}"
-                for item in self.historic
-            )
-
-            return self.PROMPT_TEMPLATE.format(
-                role=self.prompt_build,
-                history=formatted_history if self.historic else 'Não consta.',
-                current=prompt_text
-            )
-        except Exception as e:
-            print(f'[ERROR] - Ocorreu um erro durante a geração do prompt: {e}')
-            return ""
 
 
 class ComplexAgent(SimpleAgent):
@@ -131,7 +131,7 @@ class ComplexAgent(SimpleAgent):
             func_calls = self.__extract_function_calls(response_text)
 
             if not func_calls:
-                self.update_historic(user_input, response_text)
+                self._update_historic(user_input, response_text)
                 return response_text
 
             if print_messages:
@@ -143,25 +143,8 @@ class ComplexAgent(SimpleAgent):
                 result = self.__execute_function(call)
                 results[call['function_name']] = result
 
-            # Segunda rodada: prompt enriquecido com resultados
-            enriched_prompt = f"""
-            {self.prompt_build}
-    
-            O agente solicitou a execução das seguintes funções:
-            {json.dumps(results, indent=2, ensure_ascii=False)}
-    
-            Mensagem original do usuário:
-            {user_input}
-    
-            Agora gere uma resposta final ao usuário com base nos resultados das funções.
-            """
-
-            final_response = await self.agent_model.generate_content_async(enriched_prompt, stream=True)
-            await final_response.resolve()
-            final_text: str = final_response.text.strip()
-
-            self.update_historic(user_input, final_text)
-            return final_text
+            # Criando o prompt final com o resultado da execução da função:
+            return await self.__generate_and_execute_final_prompt(user_input, results)
         except Exception as e:
             print(f'[ERROR] - Ocorreu um erro durante a comunicação com o agente: {e}')
             return None
@@ -206,43 +189,43 @@ class ComplexAgent(SimpleAgent):
             )
 
             call_function_explanation = """
-              {
-                "call_functions": true, 
-                "functions_to_execute": 
-                [
-                  {
-                    "function_name": "nome_da_funcao", 
-                    "parameters": {"parametro_1": "valor_parametro_1", "parametro_n": "valor_parametro_n"}
-                  },
-                ],
-                "mensagem_ao_usuario": "texto explicativo amigável"
-              }
+{
+    "call_functions": true, 
+    "functions_to_execute": 
+        [
+            {
+                "function_name": "nome_da_funcao", 
+                "parameters": {"parametro_1": "valor_parametro_1", "parametro_n": "valor_parametro_n"}
+            },
+        ],
+    "mensagem_ao_usuario": "texto explicativo amigável"
+}
             """
 
             first_prompt_template: str = f"""
-            {self.prompt_build}
+{self.prompt_build}
             """
 
             if self.functions:
                 second_prompt_template: str = f"""
-            Você tem acesso às seguintes funções que podem ser utilizadas para responder perguntas do usuário:
-            {function_list}
-    
-            Sempre que identificar que precisa executar uma ou mais funções para responder corretamente, gere uma resposta no formato JSON no seguinte formato:
-            {call_function_explanation}
+Você tem acesso às seguintes funções que podem ser utilizadas para responder perguntas do usuário:
+{function_list}
+
+Sempre que identificar que precisa executar uma ou mais funções para responder corretamente, gere uma resposta no formato JSON no seguinte formato:
+{call_function_explanation}
                 """
             else:
                 second_prompt_template: str = ""
 
             third_prompt_template: str = f"""
-            Você pode usar o histórico de conversas abaixo para responder perguntas relacionadas a interações anteriores com o usuário. 
-            Se o usuário perguntar sobre algo que já foi dito anteriormente, procure a informação no histórico.
-    
-            Histórico de Conversas:
-            {formatted_history if formatted_history else "Não Consta."}
-    
-            Mensagem atual:
-            {prompt_text}
+Você pode usar o histórico de conversas abaixo para responder perguntas relacionadas a interações anteriores com o usuário. 
+Se o usuário perguntar sobre algo que já foi dito anteriormente, procure a informação no histórico.
+
+Histórico de Conversas:
+{formatted_history if formatted_history else "Não Consta."}
+
+Mensagem atual:
+{prompt_text}
             """
 
             final_prompt_template = first_prompt_template + second_prompt_template + third_prompt_template
@@ -251,6 +234,27 @@ class ComplexAgent(SimpleAgent):
         except Exception as e:
             print(f'[ERROR] - Ocorreu um erro durante a geração do prompt: {e}')
             return ""
+
+    async def __generate_and_execute_final_prompt(self, prompt_text: str, results: Dict[str, str]) -> str:
+        # Segunda rodada: prompt enriquecido com resultados
+        enriched_prompt = f"""
+{self.prompt_build}
+
+O agente solicitou a execução das seguintes funções:
+{json.dumps(results, indent=2, ensure_ascii=False)}
+
+Mensagem original do usuário:
+{prompt_text}
+
+Agora gere uma resposta final ao usuário com base nos resultados das funções.
+        """
+
+        final_response = await self.agent_model.generate_content_async(enriched_prompt, stream=True)
+        await final_response.resolve()
+        final_text: str = final_response.text.strip()
+
+        self._update_historic(prompt_text, final_text)
+        return final_text
 
 
 class ManagerAgent:
@@ -270,7 +274,7 @@ class ManagerAgent:
 
     async def chat(self, user_input: str) -> Optional[str]:
         # Gera o prompt com base no input e nos agentes disponíveis
-        prompt: str = self.generate_prompt(user_input)
+        prompt: str = self.__generate_prompt(user_input)
 
         if not prompt:
             print(f"[ERRO] Não foi possível montar o prompt.")
@@ -284,7 +288,7 @@ class ManagerAgent:
             extracted_agents = self.__extract_agent_call(response_text)
 
             if not extracted_agents:
-                self.update_historic(user_input, response_text, self.agent_name)
+                self.__update_historic(user_input, response_text, self.agent_name)
                 return response_text
 
             # Encontrando os Agentes solicitados:
@@ -296,14 +300,11 @@ class ManagerAgent:
                 return None
 
             delegated_agents_name = " | ".join([agent["agent"].agent_name for agent in delegated_agents])
-            self.update_historic(user_input, "Direcionado ao(s) agente(s)", delegated_agents_name)
+            self.__update_historic(user_input, "Direcionado ao(s) agente(s)", delegated_agents_name)
 
             response_delegated_agents = await self.__execute_agents_calls(delegated_agents)
 
-            if len(response_delegated_agents) == 1:
-                return response_delegated_agents[0]
-            else:
-                return await self.generate_final_prompt(prompt, response_delegated_agents)
+            return await self.__generate_and_execute_final_prompt(prompt, response_delegated_agents)
 
         except Exception as e:
             print(f"[ERRO] Falha ao interpretar a resposta do manager: {e}")
@@ -363,28 +364,12 @@ class ManagerAgent:
                 agents_response.append(f"{agent_name}: [Erro ao gerar resposta]")
             else:
                 if isinstance(result, str):
-                    self.update_historic(agent_info["message"], result, agent_name)
+                    self.__update_historic(agent_info["message"], result, agent_name)
                     agents_response.append(f"{agent_name}: {result}")
 
         return agents_response
 
-    def update_historic(self, user_input: str, agent_response: str, agent_name: str):
-        try:
-            actual_conversation = {
-                "Data": datetime.now().strftime("%d/%m/%Y %H:%M:%S"),
-                "Mensagem": {
-                    "Usuario": user_input,
-                    agent_name: agent_response,
-                }
-            }
-
-            self.historic.append(actual_conversation)
-            self.historic = self.historic[-self.MAX_HISTORY:]  # -> Mantendo apenas os N itens no histórico.
-            self.storage.save_history(self.agent_name, actual_conversation)
-        except Exception as e:
-            print(f'[ERROR] - Ocorreu um erro duração a atualizaão do histórico: {e}')
-
-    def generate_prompt(self, prompt_text: str) -> str:
+    def __generate_prompt(self, prompt_text: str) -> str:
         try:
             formatted_history = "\n\n".join(
                 f"{item['Data']} - Usuário: {item['Mensagem'].get('Usuario', '')}\n"
@@ -396,7 +381,9 @@ class ManagerAgent:
                 for item in self.historic
             )
 
-            formatted_agents = "\n".join(f"Nome do Agente: {agent_name} - Definição do Agente: {agent.prompt_build}" for agent_name, agent in self.agents.items())
+            formatted_agents = "\n".join(
+                f"Nome do Agente: {agent_name} - Definição do Agente: {agent.prompt_build}" for agent_name, agent in
+                self.agents.items())
 
             call_agent_explanation = """
 Com base na descrição dos agentes, decida se precisa chamar 0, 1 ou mais agentes.
@@ -451,12 +438,12 @@ Histórico de Conversas:
             print(f'[ERROR] - Ocorreu um erro durante a geração do prompt: {e}')
             return ""
 
-    async def generate_final_prompt(self, prompt_text: str, agents_response: List[str]) -> str:
+    async def __generate_and_execute_final_prompt(self, prompt_text: str, agents_response: List[str]) -> str:
         try:
             combined = "\n".join(agents_response)
             prompt = f"""
 Você é um agente gerente que tem sob sua responsabilidade alguns agentes especializados.
-            
+
 O usuário fez a seguinte pergunta:
 
 "{prompt_text}"
@@ -474,6 +461,22 @@ Com base nessas respostas, gere uma única resposta unificada e natural para o u
         except Exception as e:
             print(f"[ERRO] - Falha ao gerar resposta final do Manager: {e}")
             return "\n".join(agents_response)
+
+    def __update_historic(self, user_input: str, agent_response: str, agent_name: str):
+        try:
+            actual_conversation = {
+                "Data": datetime.now().strftime("%d/%m/%Y %H:%M:%S"),
+                "Mensagem": {
+                    "Usuario": user_input,
+                    agent_name: agent_response,
+                }
+            }
+
+            self.historic.append(actual_conversation)
+            self.historic = self.historic[-self.MAX_HISTORY:]  # -> Mantendo apenas os N itens no histórico.
+            self.storage.save_history(self.agent_name, actual_conversation)
+        except Exception as e:
+            print(f'[ERROR] - Ocorreu um erro duração a atualizaão do histórico: {e}')
 
 
 if __name__ == '__main__':
