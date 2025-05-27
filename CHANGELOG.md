@@ -6,6 +6,19 @@ O formato segue as convenções do [Keep a Changelog](https://keepachangelog.com
 
 ---
 
+## [0.0.2] - 2025-05-26
+
+### Adicionado
+- Criação do `ManagerAgent`: responsável por orquestrar múltiplos agentes simultaneamente, com suporte a roteamento dinâmico de mensagens.
+- Diretório `entities/` com `entities.py`: adicionado para centralizar e tipar estruturas auxiliares utilizadas pelo `ManagerAgent`.
+- Inclusão do arquivo `py.typed` para habilitar type hints com suporte a verificação estática.
+- Adição das URLs do projeto no `pyproject.toml` para melhorar indexação no PyPI:
+  - Homepage
+  - Source
+  - Issues
+
+---
+
 ## [0.0.1] - 2025-05-23
 ### Adicionado
 - Estrutura inicial do projeto com layout baseado em `src/`

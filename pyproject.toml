@@ -1,12 +1,12 @@
 [project]
 name = "tyr-agent"
-version = "0.0.1"
-description = "Agente LLM com execução de funções, histórico persistente e suporte a arquivos."
+version = "0.0.2"
+description = "Agente LLM com execução de funções, histórico persistente, suporte a arquivos e orquestração de múltiplos agentes."
 authors = [
   { name = "Witor Oliveira", email = "witoredson@gmail.com" }
 ]
 readme = "README.md"
-license = { file = "LICENSE" }
+license = { text = "MIT" }
 requires-python = ">=3.9"
 dependencies = [
   "google-generativeai",
@@ -15,12 +15,21 @@ dependencies = [
 ]
 keywords = ["llm", "agent", "gemini", "function-calling", "ai"]
 
+[project.urls]
+"Homepage" = "https://github.com/Drarlian/tyr-agent"
+"Source" = "https://github.com/Drarlian/tyr-agent"
+"Issues" = "https://github.com/Drarlian/tyr-agent/issues"
+
 [build-system]
-requires = ["setuptools", "wheel"]
+requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
 package-dir = {"" = "src"}
+include-package-data = true
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+"tyr_agent" = ["py.typed"]
