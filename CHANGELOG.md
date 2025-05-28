@@ -6,6 +6,13 @@ O formato segue as convenções do [Keep a Changelog](https://keepachangelog.com
 
 ---
 
+## [0.0.3] - 2025-05-28
+
+### Correções
+- Corrigida a ausência de uma importação obrigatória no módulo `agent.py`, que impedia o registro correto do histórico em `SimpleAgent`, `ComplexAgent` e `ManagerAgent`.
+
+---
+
 ## [0.0.2] - 2025-05-26
 
 ### Adicionado

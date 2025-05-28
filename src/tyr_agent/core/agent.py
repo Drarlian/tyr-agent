@@ -2,11 +2,12 @@ import json
 import base64
 import google.generativeai as genai
 from typing import List, Dict, Optional, Callable, Union
+from datetime import datetime
+from io import BytesIO
+from PIL import Image, ImageFile
 from tyr_agent.entities.entities import ManagerCallManyAgents, AgentCallInfo
 from tyr_agent.storage.interaction_history import InteractionHistory
 from tyr_agent.core.ai_config import configure_gemini
-from io import BytesIO
-from PIL import Image, ImageFile
 
 
 class SimpleAgent:
@@ -481,7 +482,6 @@ Com base nessas respostas, gere uma única resposta unificada e natural para o u
 
 if __name__ == '__main__':
     import asyncio
-    from datetime import datetime
 
     inicio = datetime.now()
 

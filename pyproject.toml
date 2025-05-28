@@ -1,6 +1,6 @@
 [project]
 name = "tyr-agent"
-version = "0.0.2"
+version = "0.0.3"
 description = "Agente LLM com execução de funções, histórico persistente, suporte a arquivos e orquestração de múltiplos agentes."
 authors = [
   { name = "Witor Oliveira", email = "witoredson@gmail.com" }
