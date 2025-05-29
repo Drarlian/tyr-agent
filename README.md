@@ -10,7 +10,7 @@ TyrAgent é uma biblioteca para criação de agentes inteligentes com histórico
 - 🧠 Memória persistente de interações (por agente)
 - ⚙️ Execução de múltiplas funções via JSON
 - 🧑🏻‍💼 Orquestração de múltiplos agentes com roteamento automático de mensagens
-- 🖼️ Interpretação de imagens base64
+- 🖼️ Interpretação de múltiplos tipos de arquivo
 - 🧩 Estrutura modular e extensível
 
 --- 
@@ -32,10 +32,9 @@ tyr_agent/
 ├── core/
 │   ├── agent.py  # SimpleAgent, ComplexAgent e ManagerAgent
 │   └── ai_config.py  # configure_gemini
-├── storage/
-│   └── interaction_history.py  # InteractionHistory
-└── utils/
-   └── image_utils.py  # image_to_base64
+└── storage/
+    └── interaction_history.py  # InteractionHistory
+
 ```
 
 ---
@@ -126,7 +125,7 @@ response = asyncio.run(manager_agent.chat("Me diga clima de São Paulo e quanto 
 - `ComplexAgent`: Pode sugerir funções a serem chamadas, receber resultados e finalizar a resposta;
 - `ManagerAgent`: Orquestra múltiplos agentes e delega tarefas automaticamente;
 - `InteractionHistory`: Armazena histórico individual de cada agente em JSON;
-- Suporte a arquivos base64 e imagens;
+- Suporte a múltiplos tipos de arquivo via path, base64 ou BytesIO;
 - Modular para expansão com novas capacidades (benchmark, visão, execução, etc.).
 
 ---

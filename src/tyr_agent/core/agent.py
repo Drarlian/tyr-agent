@@ -1,16 +1,14 @@
 import json
-import base64
+import asyncio
 import google.generativeai as genai
 from typing import List, Dict, Optional, Callable, Union
 from datetime import datetime
-from io import BytesIO
-from PIL import Image, ImageFile
 from tyr_agent.entities.entities import ManagerCallManyAgents, AgentCallInfo
 from tyr_agent.storage.interaction_history import InteractionHistory
-from tyr_agent.core.ai_config import configure_gemini
+from tyr_agent.mixins.file_mixins import FileMixin
 
 
-class SimpleAgent:
+class SimpleAgent(FileMixin):
     MAX_ALLOWED_HISTORY = 20
 
     def __init__(self, prompt_build: str, agent_name: str, model: genai.GenerativeModel, storage: Optional[InteractionHistory] = None, max_history: int = 20):
@@ -35,16 +33,17 @@ class SimpleAgent:
         {current}
         """
 
-    async def chat(self, user_input: str, streaming: bool = False, base64_files: Optional[List[str]] = None, print_messages: bool = False) -> Optional[str]:
+    async def chat(self, user_input: str, streaming: bool = False, files: Optional[List[dict]] = None, print_messages: bool = False) -> Optional[str]:
         try:
-            prompt = self.__generate_prompt(user_input)
+            prompt: Union[str, list] = self.__generate_prompt(user_input)
 
             if not prompt:
                 raise Exception("[ERROR] - Erro ao gerar o prompt.")
 
-            if base64_files:
-                files: List[ImageFile] = [self.convert_base64_to_image(b64) for b64 in base64_files]
-                prompt = [prompt] + files[:10]
+            if files:
+                files_formated: List[dict] = [self.convert_item_to_gemini_file(item["file"], item["file_name"]) for item in files]
+                files_valid: List[dict] = [file for file in files_formated if file]
+                prompt = [prompt] + files_valid[:10]
 
             response = await self.agent_model.generate_content_async(prompt, stream=True)
             await response.resolve()
@@ -88,22 +87,8 @@ class SimpleAgent:
         except Exception as e:
             print(f'[ERROR] - Ocorreu um erro duração a atualizaão do histórico: {e}')
 
-    def convert_base64_to_image(self, base64_file: str) -> Optional[ImageFile]:
-        try:
-            if base64_file.startswith('data:image'):
-                base64_file = base64_file.split(',')[1]
 
-            bytes_image = base64.b64decode(base64_file)
-            buffer = BytesIO(bytes_image)
-            image = Image.open(buffer)
-
-            return image
-        except Exception as e:
-            print(f"[ERROR] - Erro ao converter base64 para imagem: {e}")
-            return None
-
-
-class ComplexAgent(SimpleAgent):
+class ComplexAgent(SimpleAgent, FileMixin):
     MAX_ALLOWED_HISTORY = 20
 
     def __init__(self, prompt_build: str, agent_name: str, model: genai.GenerativeModel, functions: Optional[dict[str, Callable]] = None, storage: Optional[InteractionHistory] = None, max_history: int = 20):
@@ -112,18 +97,18 @@ class ComplexAgent(SimpleAgent):
 
         self.PROMPT_TEMPLATE = ""
 
-    async def chat(self, user_input: str, streaming: bool = False, base64_files: Optional[List[str]] = None, print_messages: bool = False) -> str | None:
+    async def chat(self, user_input: str, streaming: bool = False, files: Optional[List[dict]] = None, print_messages: bool = False) -> str | None:
         # Primeira rodada:
-        prompt = self.__generate_prompt_with_functions(user_input)
+        prompt: Union[str, list] = self.__generate_prompt_with_functions(user_input)
 
         if not prompt:
             raise Exception("[ERROR] - Erro ao gerar o prompt.")
 
         try:
-
-            if base64_files:
-                files: List[ImageFile] = [self.convert_base64_to_image(b64) for b64 in base64_files]
-                prompt = [prompt] + files[:10]
+            if files:
+                files_formated: List[dict] = [self.convert_item_to_gemini_file(item["file"], item["file_name"]) for item in files]
+                files_valid: List[dict] = [file for file in files_formated if file]
+                prompt = [prompt] + files_valid[:10]
 
             response = await self.agent_model.generate_content_async(prompt, stream=True)
             await response.resolve()
@@ -341,12 +326,6 @@ class ManagerAgent:
             return []
 
     async def __execute_agents_calls(self, delegated_agents: List[AgentCallInfo]) -> List[str]:
-        # agents_response: List[str] = []
-        # for agent_info in delegated_agents:
-        #     response = await agent_info["agent"].chat(agent_info["message"], streaming=True)
-        #     agents_response.append(f"{agent_info["agent"].agent_name}: {response}")
-        #     self.update_historic(agent_info["message"], response, agent_info["agent"].agent_name)
-
         # Execução paralela dos agentes:
         coroutines = [
             delegated_agent["agent"].chat(delegated_agent["message"], streaming=True)
@@ -478,39 +457,3 @@ Com base nessas respostas, gere uma única resposta unificada e natural para o u
             self.storage.save_history(self.agent_name, actual_conversation)
         except Exception as e:
             print(f'[ERROR] - Ocorreu um erro duração a atualizaão do histórico: {e}')
-
-
-if __name__ == '__main__':
-    import asyncio
-
-    inicio = datetime.now()
-
-    configure_gemini()
-    model_test = genai.GenerativeModel('gemini-2.5-flash-preview-04-17')
-    weather_agent = SimpleAgent("Você é um agente responsável por fornecer apenas informações sobre o clima.", "WeatherAgent", model_test)
-    # response_test = asyncio.run(weather_agent.chat("Qual o clima atualmente no São Paulo?"))
-    # print(response_test)
-
-    functions_test = {
-        "sum_numbers": lambda nums: f"A soma de {nums} é igual a {sum(nums)}",
-    }
-    sum_agent = ComplexAgent("Você é um agente responsável por fornecer apenas informações de soma de números.", "SumAgent", model_test, functions_test)
-    # response_test = asyncio.run(sum_agent.chat("Quanto é 10+20?"))
-    # print(response_test)
-
-    manager = ManagerAgent(
-        prompt_build="",
-        agent_name="ManagerAgent1",
-        model=model_test,
-        agents={"clima": weather_agent, "soma": sum_agent},
-    )
-
-    response_test = asyncio.run(manager.chat("Qual é a temperatura atual de Fortaleza? E quanto é 87+23?"))
-    print(response_test)
-
-    fim = datetime.now()
-
-    print(f"Tempo Percorrido: {fim-inicio}")
-
-    # Tempo Percorrido com pool: 0:00:09.265001 | Tempo Percorrido: 0:00:15.954875 | Tempo Percorrido: 0:00:10.745561
-    # Tempo Percorrido sem pool: 0:00:14.454556 | Tempo Percorrido: 0:00:11.398759 | Tempo Percorrido: 0:00:12.940998

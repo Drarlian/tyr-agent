@@ -6,6 +6,15 @@ O formato segue as convenções do [Keep a Changelog](https://keepachangelog.com
 
 ---
 
+## [0.0.4] - 2025-05-29
+
+### Adicionado
+- Suporte expandido para diferentes tipos de arquivos além de imagens JPG, JPEG e PNG. Agora os agentes `SimpleAgent` e `ComplexAgent` também podem receber e processar arquivos como PDF, TXT e outros formatos compatíveis.
+- Novas formas de envio de arquivos adicionadas: agora é possível fornecer arquivos via **path**, **base64** ou **BytesIO**.
+- Criada a classe `FileMixin` em `mixins/file_mixins.py` para padronizar e reutilizar a lógica de leitura de arquivos entre os agentes.
+
+---
+
 ## [0.0.3] - 2025-05-28
 
 ### Correções
