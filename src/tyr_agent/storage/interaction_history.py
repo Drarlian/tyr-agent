@@ -34,3 +34,10 @@ class InteractionHistory:
                 return json.load(f)
         except FileNotFoundError:
             return {}
+
+    def clear_history(self) -> None:
+        try:
+            with open(self.filename, "w", encoding="utf-8") as f:
+                json.dump({}, f, indent=2, ensure_ascii=False)
+        except Exception as e:
+            print(f"[ERROR] - Erro ao limpar o histórico.")

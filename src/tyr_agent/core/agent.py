@@ -102,20 +102,45 @@ class SimpleAgent(FileMixin):
         except Exception as e:
             print(f'[ERROR] - Ocorreu um erro duração a atualização do histórico: {e}')
 
-    def create_history(self, storage: Optional[InteractionHistory] = None) -> None:
+    def create_agent_history(self, storage: Optional[InteractionHistory] = None) -> None:
+        """
+        Cria uma instância para de histórico o agente atual.
+        Caso já exista um histórico para o agente atual, apenas conecta o histórico com o agente.
+        :param storage: Histórico a ser carregado, caso não seja passado será criado/procurado um.
+        :return: Não retorna nada.
+        """
         self.storage: InteractionHistory | None = storage or InteractionHistory(f"{self.agent_name.lower()}_history.json")
         self.history: List[dict] | None = self.storage.load_history(self.agent_name)
         self.use_history: bool = True
 
-    def remove_history(self) -> None:
+    def remove_agent_history(self) -> None:
         """
         Remove o histórico carregado da instância atual.
         Não exclui o arquivo físico do histórico no disco.
-        :return: Não retorna nada.
+        :return: None
         """
         self.storage: InteractionHistory | None = None
         self.history: List[dict] | None = None
         self.use_history: bool = False
+
+    def clear_agent_history(self) -> None:
+        """
+        Limpa o campo histórico da agente, caso ele exista.
+        Não altera o arquivo do histórico no disco.
+        :return: None
+        """
+        if self.history is not None:
+            self.history.clear()
+
+    def clear_storage(self) -> None:
+        """
+        Limpa o campo storage do agente, caso ele exista.
+        Realmente limpa o arquivo do histórico no disco.
+        :return: None
+        """
+        if self.storage is not None:
+            self.storage.clear_history()
+
 
 class ComplexAgent(SimpleAgent, FileMixin):
     MAX_ALLOWED_HISTORY = 20
