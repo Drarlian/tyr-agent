@@ -137,7 +137,7 @@ Com base na mensagem atual, gere uma resposta natural para o usuário.
         if self.history is not None:
             self.history.clear()
 
-    def clear_storage(self) -> None:
+    def clear_agent_storage(self) -> None:
         """
         Limpa o campo storage do agente, caso ele exista.
         Realmente limpa o arquivo do histórico no disco.
