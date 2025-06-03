@@ -52,9 +52,12 @@ configure_gemini()
 agent = SimpleAgent(
     prompt_build="Você é um assistente de clima.",
     agent_name="WeatherAgent",
-    model=genai.GenerativeModel("gemini-2.5-flash-preview-04-17")
+    model=genai.GenerativeModel("gemini-2.5-flash-preview-04-17"),
+    use_history=True  # É um parâmetro opicional e pode ser True ou False.
 )
-response = asyncio.run(agent.chat("Qual o clima em Salvador?"))
+
+# O parâmetro "save_history" também é opicional e pode ser True ou False.
+response = asyncio.run(agent.chat("Qual o clima em Salvador?", save_history=True))
 ```
 
 ### ⚙️ Criando um agente com funções
@@ -73,10 +76,12 @@ agent = ComplexAgent(
     prompt_build="Você pode fazer cálculos e responder sobre o clima.",
     agent_name="WeatherSumBot",
     model=genai.GenerativeModel("gemini-2.5-flash-preview-04-17"),
-    functions={"somar": somar, "pegar_clima": pegar_clima}
+    functions={"somar": somar, "pegar_clima": pegar_clima},
+    use_history=False  # É um parâmetro opicional e pode ser True ou False.
 )
 
-response = asyncio.run(agent.chat("Me diga quanto é 10+5 e o clima de São Paulo"))
+# O parâmetro "save_history" também é opicional e pode ser True ou False.
+response = asyncio.run(agent.chat("Me diga quanto é 10+5 e o clima de São Paulo", save_history=False))
 ```
 
 ### 🧑🏻‍💼 Criando um orquestrador de agentes
@@ -108,13 +113,14 @@ math_agent = ComplexAgent(
 
 configure_gemini()
 manager_agent = ManagerAgent(
-    prompt_build="",
     agent_name="ManagerAgent",
     model=model,
     agents={"weather": weather_agent, "math": math_agent},
+    use_history=True  # É um parâmetro opicional e pode ser True ou False.
 )
 
-response = asyncio.run(manager_agent.chat("Me diga clima de São Paulo e quanto é 10+5"))
+# O parâmetro "save_history" também é opicional e pode ser True ou False.
+response = asyncio.run(manager_agent.chat("Me diga clima de São Paulo e quanto é 10+5", save_history=False))
 ```
 
 ---

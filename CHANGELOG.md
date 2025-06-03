@@ -6,6 +6,28 @@ O formato segue as convenções do [Keep a Changelog](https://keepachangelog.com
 
 ---
 
+## [0.0.5] - 2025-06-03
+
+### Adicionado
+- Nova flag `use_history` na criação dos agentes, permitindo definir se o histórico será considerado durante a execução.
+- Nova flag `save_history` no método `.chat()` dos agentes, permitindo controle por interação sobre o salvamento do histórico.
+- Novos métodos utilitários adicionados a todos os agentes (`SimpleAgent`, `ComplexAgent`, `ManagerAgent`) para controle total do histórico:
+  - `create_agent_history()` – conecta ou cria um histórico para o agente.
+  - `remove_agent_history()` – desconecta o histórico da instância atual.
+  - `clear_agent_history()` – limpa o histórico carregado (em memória).
+  - `clear_agent_storage()` – remove o conteúdo do arquivo físico do histórico.
+
+### Alterado
+- Reformulação completa do formato de histórico para os agentes `SimpleAgent`, `ComplexAgent` e `ManagerAgent`, com dados mais objetivos, padronizados e leves.
+- O `ManagerAgent` teve sua estrutura de histórico otimizada, eliminando redundância e reduzindo o uso de espaço.
+- Prompts internos otimizados para maior clareza e menor consumo de tokens, resultando em respostas mais fluídas e consistentes.
+
+### Correções
+- Correção de pequenos bugs relacionados ao histórico e consistência de respostas.
+- Ajustes pontuais de performance e simplificação de trechos de código.
+
+---
+
 ## [0.0.4] - 2025-05-29
 
 ### Adicionado
