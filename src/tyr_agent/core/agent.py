@@ -12,7 +12,7 @@ import uuid
 class SimpleAgent(FileMixin):
     MAX_ALLOWED_HISTORY = 20
 
-    def __init__(self, prompt_build: str, agent_name: str, model: genai.GenerativeModel, storage: Optional[InteractionHistory] = None, max_history: int = 20, use_history: bool = True):
+    def __init__(self, prompt_build: str, agent_name: str, model: genai.GenerativeModel, storage: Optional[InteractionHistory] = None, max_history: int = 20, use_history: bool = True, use_score: bool = True, score_average: Union[int, float] = 3):
         self.prompt_build: str = prompt_build
         self.agent_name: str = agent_name
 
@@ -20,9 +20,15 @@ class SimpleAgent(FileMixin):
         self.history: List[dict] | None = None
         self.use_history: bool = use_history
 
+        self.use_score: bool = use_score
+        self.score_average: Union[int, float] = score_average if self._is_valid_score(score_average) else 3
+
         if use_history:
             self.storage = storage or InteractionHistory(f"{agent_name.lower()}_history.json")
             self.history = self.storage.load_history(agent_name)
+
+            if use_score:
+                self._filter_history_by_score()
 
         self.agent_model: genai.GenerativeModel = model
 
@@ -107,6 +113,9 @@ Com base na mensagem atual, gere uma resposta natural para o usuário.
         except Exception as e:
             print(f'[ERROR] - Ocorreu um erro duração a atualização do histórico: {e}')
 
+    def get_agent_history(self) -> List[dict]:
+        return self.history
+
     def create_agent_history(self, storage: Optional[InteractionHistory] = None) -> None:
         """
         Cria uma instância para de histórico o agente atual.
@@ -146,8 +155,117 @@ Com base na mensagem atual, gere uma resposta natural para o usuário.
         if self.storage is not None:
             self.storage.clear_history()
 
+    def rate_interaction(self, interaction_id: str, score: Union[int, float]) -> bool:
+        """
+        Define o score de uma interação específica do histórico.
+        Atualiza o histórico atual do agente baseado no score_average do agente.
+        :param interaction_id: ID da interação.
+        :param score: Nota definida para a interação, indo apenas de 0 a 5.
+        :return: True caso tenha dado certo | False caso tenha dado errado.
+        """
+        try:
+            if not self.use_history or not self.storage:
+                return False
 
-class ComplexAgent(SimpleAgent, FileMixin):
+            if not self._is_valid_score(score):
+                return False
+
+            response_update: bool = self.storage.update_score(self.agent_name, interaction_id, score)
+
+            self.history = self.storage.load_history(self.agent_name)
+
+            if self.use_score:
+                if not self._is_valid_score(self.score_average):
+                    self.score_average = 3
+                self._filter_history_by_score()
+
+            return response_update
+        except Exception as e:
+            print(e)
+            return False
+
+    def get_score_by_id(self, interaction_id: str) -> Union[int, float]:
+        """
+        Pega o score da interação procurada.
+        :return: Retorna o score de uma interação.
+        """
+        try:
+            if not self.storage:
+                return 0.0
+
+            data = self.storage.load_all()
+
+            for interaction in data.get(self.agent_name, []):
+                if interaction.get("id") == interaction_id:
+                    return interaction.get("score")
+
+            return 0.0
+        except Exception as e:
+            print(f"[ERROR] - get_score_by_id: {e}")
+            return 0.0
+
+    def get_average_score(self) -> float:
+        """
+        Pega a média do score no histórico.
+        :return: Média do score.
+        """
+        try:
+            if not self.storage:
+                return 0.0
+
+            data = self.storage.load_all()
+
+            sum_interactions: Union[int, float] = 0
+            count_interactions: int = 0
+
+            for interaction in data.get(self.agent_name, []):
+                if isinstance(interaction.get("score"), (int, float)):
+                    sum_interactions += interaction.get("score")
+                    count_interactions += 1
+
+            if count_interactions == 0:
+                return 0.0
+
+            return sum_interactions / count_interactions
+        except Exception as e:
+            return 0.0
+
+    def get_all_scores(self) -> List[dict]:
+        """
+        Pega todos os scores de um agente.
+        :return: Retorna uma lista de dicionários contendo todos os ids e scores.
+        """
+        try:
+            if not self.storage:
+                return []
+
+            data = self.storage.load_all()
+
+            return [
+                {"id": i.get("id"), "score": i.get("score")}
+                for i in data.get(self.agent_name, [])
+                if "id" in i
+            ]
+        except Exception as e:
+            return []
+
+    def _is_valid_score(self, score: Union[int, float]) -> bool:
+        """
+        Verifica se o score informado é válido.
+        :param score: Score a ser validado.
+        :return: True caso seja válido. | False caso não seja válido.
+        """
+        return isinstance(score, (int, float)) and 0 <= score <= 5
+
+    def _filter_history_by_score(self) -> None:
+        """
+        Filtra o histórico atual com base no score_average do agente.
+        :return: None
+        """
+        self.history = list(filter(lambda x: isinstance(x.get("score"), (int, float)) and (x.get("score") >= self.score_average), self.history))
+
+
+class ComplexAgent(SimpleAgent):
     MAX_ALLOWED_HISTORY = 20
 
     def __init__(self, prompt_build: str, agent_name: str, model: genai.GenerativeModel, functions: Optional[dict[str, Callable]] = None, storage: Optional[InteractionHistory] = None, max_history: int = 20, use_history: bool = True):
