@@ -61,5 +61,22 @@ class InteractionHistory:
             else:
                 return False
         except Exception as e:
-            print(f"[ERROR] - Erro ao salvar histórico: {e}")
+            print(f"[ERROR] - Erro ao atualizar o score: {e}")
+            return False
+
+    def delete_history(self, agent_name: str, interaction_id: str) -> bool:
+        try:
+            data = self.load_all()
+
+            if data.get(agent_name, False):
+                data[agent_name] = list(filter(lambda x: x["id"] != interaction_id, data[agent_name]))
+
+                with open(self.filename, "w", encoding="utf-8") as f:
+                    json.dump(data, f, indent=2, ensure_ascii=False)
+
+                return True
+            else:
+                return False
+        except Exception as e:
+            print(f"[ERROR] - Erro ao excluir interação: {e}")
             return False

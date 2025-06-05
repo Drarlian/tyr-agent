@@ -33,18 +33,19 @@ class SimpleAgent(FileMixin):
         self.agent_model: genai.GenerativeModel = model
 
         self.MAX_HISTORY = min(max_history, self.MAX_ALLOWED_HISTORY)
-        self.PROMPT_TEMPLATE = """
-{role}
+        self.PROMPT_TEMPLATE = """{role}
 
 Você pode usar o histórico de conversas abaixo para responder perguntas relacionadas a interações anteriores com o usuário. 
 Se o usuário perguntar sobre algo que já foi dito anteriormente, procure a informação no histórico.
+
+Cada resposta do agente no histórico pode conter uma nota de 0 a 5, representando o quanto ela foi útil para o usuário. 
+Use essas notas como um indicativo da qualidade da resposta anterior. Priorize informações com notas mais altas e busque manter esse nível de qualidade em sua resposta atual.
 
 Histórico de Conversas:
 {history}
 
 Com base na mensagem atual, gere uma resposta natural para o usuário.
-{current}
-        """
+{current}"""
 
     async def chat(self, user_input: str, streaming: bool = False, files: Optional[List[dict]] = None, save_history: bool = True) -> Optional[str]:
         try:
@@ -79,8 +80,14 @@ Com base na mensagem atual, gere uma resposta natural para o usuário.
                     current=prompt_text
                 )
 
+            def insert_score(score: Union[int, float, float]):
+                if self.use_score:
+                    return f" - Score: {str(score) + '/5' if score is not None else 'Não consta'}"
+                else:
+                    return ''
+
             formatted_history = "\n".join(
-                f"{item['timestamp']} - User: {item['interaction']['user']}\nAgent: {' | '.join(item['interaction']['agent'])}"
+                f"{item['timestamp']}{insert_score(item['score'])}\nUser: {item['interaction']['user']}\nAgent: {' | '.join(item['interaction']['agent'])}"
                 for item in self.history
             )
 
@@ -184,6 +191,17 @@ Com base na mensagem atual, gere uma resposta natural para o usuário.
             print(e)
             return False
 
+    def delete_interaction(self, interaction_id: str) -> bool:
+        """
+        Deleta a interação com o id informado.
+        :param interaction_id: ID da interação que será deletada.
+        :return: True caso tenha dado certo | False caso tenha dado errado.
+        """
+        try:
+            return self.storage.delete_history(self.agent_name, interaction_id)
+        except Exception as e:
+            return False
+
     def get_score_by_id(self, interaction_id: str) -> Union[int, float]:
         """
         Pega o score da interação procurada.
@@ -262,14 +280,14 @@ Com base na mensagem atual, gere uma resposta natural para o usuário.
         Filtra o histórico atual com base no score_average do agente.
         :return: None
         """
-        self.history = list(filter(lambda x: isinstance(x.get("score"), (int, float)) and (x.get("score") >= self.score_average), self.history))
+        self.history = list(filter(lambda x: (x.get("score") is None or isinstance(x.get("score"), (int, float))) and (x.get("score") is None or x.get("score") >= self.score_average), self.history))
 
 
 class ComplexAgent(SimpleAgent):
     MAX_ALLOWED_HISTORY = 20
 
-    def __init__(self, prompt_build: str, agent_name: str, model: genai.GenerativeModel, functions: Optional[dict[str, Callable]] = None, storage: Optional[InteractionHistory] = None, max_history: int = 20, use_history: bool = True):
-        super().__init__(prompt_build, agent_name, model, storage, max_history, use_history)
+    def __init__(self, prompt_build: str, agent_name: str, model: genai.GenerativeModel, functions: Optional[dict[str, Callable]] = None, storage: Optional[InteractionHistory] = None, max_history: int = 20, use_history: bool = True, use_score: bool = True, score_average: Union[int, float] = 3):
+        super().__init__(prompt_build, agent_name, model, storage, max_history, use_history, use_score, score_average)
         self.functions: dict[str, Callable] = functions or {}
 
         self.PROMPT_TEMPLATE = ""
@@ -359,8 +377,14 @@ class ComplexAgent(SimpleAgent):
             if not self.use_history or not self.history:
                 formatted_history = False
             else:
+                def insert_score(score: Union[int, float, float]):
+                    if self.use_score:
+                        return f" - Score: {str(score)+'/5' if score is not None else 'Não consta'}"
+                    else:
+                        return ''
+
                 formatted_history = "\n".join(
-                    f"{item['timestamp']} - User: {item['interaction']['user']}\nAgent: {' | '.join(item['interaction']['agent'])}"
+                    f"{item['timestamp']}{insert_score(item['score'])}\nUser: {item['interaction']['user']}\nAgent: {' | '.join(item['interaction']['agent'])}"
                     for item in self.history
                 )
 
@@ -380,12 +404,9 @@ class ComplexAgent(SimpleAgent):
             },
         ],
     "message_to_user": "texto explicativo amigável"
-}
-            """
+}"""
 
-            first_prompt_template: str = f"""
-{self.prompt_build}
-            """
+            first_prompt_template: str = f"{self.prompt_build}\n"
 
             if self.functions:
                 second_prompt_template: str = f"""
@@ -398,18 +419,25 @@ Sempre que identificar que precisa executar uma ou mais funções para responder
             else:
                 second_prompt_template: str = ""
 
-            third_prompt_template: str = f"""
-Você pode usar o histórico de conversas abaixo para responder perguntas relacionadas a interações anteriores com o usuário. 
+            if self.use_history:
+                third_prompt_template: str = f"""
+Você pode usar o histórico de conversas abaixo para responder perguntas relacionadas a interações anteriores com o usuário.
 Se o usuário perguntar sobre algo que já foi dito anteriormente, procure a informação no histórico.
-
+{
+'''\nCada resposta do agente no histórico pode conter uma nota de 0 a 5, representando o quanto ela foi útil para o usuário. 
+Use essas notas como um indicativo da qualidade da resposta anterior. Priorize informações com notas mais altas e busque manter esse nível de qualidade em sua resposta atual.\n''' if self.use_score else ''
+}
 Histórico de Conversas:
 {formatted_history if formatted_history else "Não Consta."}
+                """
+            else:
+                third_prompt_template: str = ""
 
+            fourth_prompt_template: str = f"""
 Mensagem atual:
-{prompt_text}
-            """
+{prompt_text}"""
 
-            final_prompt_template = first_prompt_template + second_prompt_template + third_prompt_template
+            final_prompt_template = first_prompt_template + second_prompt_template + third_prompt_template + fourth_prompt_template
 
             return final_prompt_template
         except Exception as e:
@@ -436,8 +464,8 @@ Com base nos resultados das funções, gere uma resposta natural para o usuário
 class ManagerAgent(SimpleAgent):
     MAX_ALLOWED_HISTORY = 100
 
-    def __init__(self, agent_name: str, model: genai.GenerativeModel, agents: Dict[str, Union[SimpleAgent, ComplexAgent]], storage: Optional[InteractionHistory] = None, max_history: int = 100, use_history: bool = True):
-        super().__init__("", agent_name, model, storage, max_history, use_history)
+    def __init__(self, agent_name: str, model: genai.GenerativeModel, agents: Dict[str, Union[SimpleAgent, ComplexAgent]], storage: Optional[InteractionHistory] = None, max_history: int = 100, use_history: bool = True, use_score: bool = True, score_average: Union[int, float] = 3):
+        super().__init__("", agent_name, model, storage, max_history, use_history, use_score, score_average)
         self.prompt_build: str = ""
 
         self.agents: Dict[str, Union[SimpleAgent, ComplexAgent]] = agents
@@ -549,8 +577,14 @@ class ManagerAgent(SimpleAgent):
             if not self.use_history or not self.history:
                 formatted_history = False
             else:
+                def insert_score(score: Union[int, float, float]):
+                    if self.use_score:
+                        return f" - Score: {str(score)+'/5' if score is not None else 'Não consta'}"
+                    else:
+                        return ''
+
                 formatted_history = "\n\n".join(
-                    f"{item['timestamp']} - User: {item['interaction'].get('user', '')}\n"
+                    f"{item['timestamp']}{insert_score(item['score'])}\nUser: {item['interaction'].get('user', '')}\n"
                     + "\n".join(
                         f"{agent_name}: {resposta}"
                         for agent_name, resposta in item["interaction"].items()
@@ -563,8 +597,7 @@ class ManagerAgent(SimpleAgent):
                 f"Nome do Agente: {agent_name} - Definição do Agente: {agent.prompt_build}" for agent_name, agent in
                 self.agents.items())
 
-            call_agent_explanation = """
-Com base na descrição dos agentes, decida se precisa chamar 0, 1 ou mais agentes.
+            call_agent_explanation = """Com base na descrição dos agentes, decida se precisa chamar 0, 1 ou mais agentes.
 Para chamar algum agente responda APENAS com um JSON no formato:
 
 {
@@ -577,11 +610,9 @@ Para chamar algum agente responda APENAS com um JSON no formato:
             },
             ...
         ],
-}
-            """
+}"""
 
-            full_prompt = f"""
-Você é um agente gerente responsável por coordenar uma equipe de agentes especializados. Cada agente possui uma função bem definida, e você deve delegar partes da pergunta do usuário para o(s) agente(s) mais adequados.
+            first_prompt_template: str = f"""Você é um agente gerente responsável por coordenar uma equipe de agentes especializados. Cada agente possui uma função bem definida, e você deve delegar partes da pergunta do usuário para o(s) agente(s) mais adequados.
 Se nenhum agente for adequado, **responda diretamente você mesmo** com um texto comum (sem JSON).
 
 Abaixo está a descrição dos agentes disponíveis:
@@ -603,16 +634,22 @@ Sua tarefa é:
 **Importante:**
 - Se a pergunta do usuário puder ser dividida entre vários agentes, crie um item para cada agente.
 - Se apenas um agente for necessário, retorne o JSON contendo apenas um agente.
-- Se nenhum agente for adequado, **responda diretamente você mesmo** com um texto comum (sem JSON).
-
-Você pode usar o histórico de conversas abaixo para responder perguntas relacionadas a interações anteriores com o usuário. 
-Se o usuário perguntar sobre algo que já foi dito anteriormente, procure a informação no histórico.
-
-Histórico de Conversas:
-{formatted_history if formatted_history else "Não Consta."}
             """
 
-            return full_prompt
+            if self.use_history and formatted_history:
+                second_prompt_template: str = f"""
+Você pode usar o histórico de conversas abaixo para responder perguntas relacionadas a interações anteriores com o usuário. 
+Se o usuário perguntar sobre algo que já foi dito anteriormente, procure a informação no histórico.
+{
+'''\nCada resposta do agente no histórico pode conter uma nota de 0 a 5, representando o quanto ela foi útil para o usuário. 
+Use essas notas como um indicativo da qualidade da resposta anterior. Priorize informações com notas mais altas e busque manter esse nível de qualidade em sua resposta atual.\n''' if self.use_score else ''
+}
+Histórico de Conversas:
+{formatted_history if formatted_history else "Não Consta."}"""
+            else:
+                second_prompt_template = ""
+
+            return first_prompt_template + second_prompt_template
         except Exception as e:
             print(f'[ERROR] - Ocorreu um erro durante a geração do prompt: {e}')
             return ""
