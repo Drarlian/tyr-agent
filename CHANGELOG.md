@@ -6,6 +6,31 @@ O formato segue as convenções do [Keep a Changelog](https://keepachangelog.com
 
 ---
 
+## [0.0.6] - 2025-06-05
+
+### Adicionado
+- Introduzido o conceito de `score` nas interações armazenadas no histórico dos agentes.
+- Novos parâmetros na criação dos agentes:
+  - `use_score`: define se o histórico deve ser filtrado por score (padrão: `True`).
+  - `score_average`: valor mínimo (de 0 a 5) para que uma interação seja utilizada no histórico do agente (padrão: `3`).
+- Nova propriedade `score` atribuída às interações. Inicialmente `None`, pode ser atualizada com avaliação posterior.
+- Novos métodos utilitários adicionados aos agentes (`SimpleAgent`, `ComplexAgent`, `ManagerAgent`) para gerenciar avaliações:
+  - `rate_interaction()` – avalia uma interação já registrada.
+  - `delete_interaction()` – remove manualmente uma interação específica do histórico.
+  - `get_score_by_id()` – retorna o score de uma interação específica.
+  - `get_average_score()` – calcula a média dos scores avaliados.
+  - `get_all_scores()` – retorna todos os scores registrados pelo agente.
+
+### Alterado
+- Otimização dos prompts internos dos agentes (`SimpleAgent`, `ComplexAgent`, `ManagerAgent`) para maior clareza, menor consumo de tokens e melhor entendimento do histórico.
+
+### Correções
+- Pequenos bugs corrigidos relacionados à lógica de armazenamento e leitura do histórico.
+
+🙌 Agradecimento especial ao **Kayky Rodrigues** pela sugestão do sistema de avaliação por score, que agora faz parte da lógica central dos agentes.
+
+---
+
 ## [0.0.5] - 2025-06-03
 
 ### Adicionado

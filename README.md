@@ -6,11 +6,12 @@
 
 TyrAgent é uma biblioteca para criação de agentes inteligentes com histórico, function-calling, suporte a arquivos e orquestração de múltiplos agentes. Ideal para aplicações com modelos generativos como Gemini, GPT e similares.
 
-- 💬 Conversas com ou sem streaming
-- 🧠 Memória persistente de interações (por agente)
-- ⚙️ Execução de múltiplas funções via JSON
-- 🧑🏻‍💼 Orquestração de múltiplos agentes com roteamento automático de mensagens
-- 🖼️ Interpretação de múltiplos tipos de arquivo
+- 💬 Conversas com ou sem `streaming`
+- 🧠 `Memória` persistente de interações (por agente), com controle total de uso e armazenamento
+- 📊 Sistema de `score` por interação para qualificar e filtrar o histórico
+- ⚙️ Execução de funções python durante a conversa, com suporte a `function calling`
+- 🧑🏻‍💼 `Orquestração` de múltiplos agentes com roteamento automático de mensagens
+- 🖼️ Interpretação de múltiplos tipos de `arquivo`
 - 🧩 Estrutura modular e extensível
 
 --- 
@@ -53,7 +54,9 @@ agent = SimpleAgent(
     prompt_build="Você é um assistente de clima.",
     agent_name="WeatherAgent",
     model=genai.GenerativeModel("gemini-2.5-flash-preview-04-17"),
-    use_history=True  # É um parâmetro opicional e pode ser True ou False.
+    use_history=True,  # É um parâmetro opicional e pode ser True ou False.
+    use_score=True,    # É um parâmetro opicional e pode ser True ou False.,
+    score_average=3    # É um parâmetro opicional e pode variar de 0 a 5.,
 )
 
 # O parâmetro "save_history" também é opicional e pode ser True ou False.
@@ -77,7 +80,9 @@ agent = ComplexAgent(
     agent_name="WeatherSumBot",
     model=genai.GenerativeModel("gemini-2.5-flash-preview-04-17"),
     functions={"somar": somar, "pegar_clima": pegar_clima},
-    use_history=False  # É um parâmetro opicional e pode ser True ou False.
+    use_history=False,  # É um parâmetro opicional e pode ser True ou False.
+    use_score=False,    # É um parâmetro opicional e pode ser True ou False.,
+    score_average=1     # É um parâmetro opicional e pode variar de 0 a 5.,
 )
 
 # O parâmetro "save_history" também é opicional e pode ser True ou False.
@@ -116,7 +121,10 @@ manager_agent = ManagerAgent(
     agent_name="ManagerAgent",
     model=model,
     agents={"weather": weather_agent, "math": math_agent},
-    use_history=True  # É um parâmetro opicional e pode ser True ou False.
+    use_history=True,  # É um parâmetro opicional e pode ser True ou False.,
+    use_score=True,    # É um parâmetro opicional e pode ser True ou False.,
+    score_average=4    # É um parâmetro opicional e pode variar de 0 a 5.,
+
 )
 
 # O parâmetro "save_history" também é opicional e pode ser True ou False.
@@ -128,11 +136,13 @@ response = asyncio.run(manager_agent.chat("Me diga clima de São Paulo e quanto 
 ## 🧠 Principais recursos
 
 - `SimpleAgent`: Conversa com contexto e histórico;
-- `ComplexAgent`: Pode sugerir funções a serem chamadas, receber resultados e finalizar a resposta;
+- `ComplexAgent`: Capaz de sugerir e executar funções, processar os resultados e entregar uma resposta final;
 - `ManagerAgent`: Orquestra múltiplos agentes e delega tarefas automaticamente;
-- `InteractionHistory`: Armazena histórico individual de cada agente em JSON;
+- `InteractionHistory`: Armazena o histórico individual de cada agente em JSON;
 - Suporte a múltiplos tipos de arquivo via path, base64 ou BytesIO;
-- Modular para expansão com novas capacidades (benchmark, visão, execução, etc.).
+- Sistema de score por interação (0 a 5) com média configurável (`score_average`) para decidir o que deve ou não ser utlizado no histórico;
+- Histórico totalmente gerenciável com métodos para criar, remover, limpar ou apagar os dados persistidos;
+- Estrutura modular e extensível para expansão futura (benchmark, visão computacional, execução de código etc.).
 
 ---
 
