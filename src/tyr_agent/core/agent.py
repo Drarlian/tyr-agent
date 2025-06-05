@@ -77,7 +77,7 @@ class SimpleAgent(FileMixin):
 
             first_prompt_template: str = f"{self.prompt_build}\n"
 
-            if self.use_history:
+            if self.use_history and formatted_history:
                 second_prompt_template: str = f"""
 Você pode usar o histórico de conversas abaixo para responder perguntas relacionadas a interações anteriores com o usuário. 
 Se o usuário perguntar sobre algo que já foi dito anteriormente, procure a informação no histórico.
@@ -421,7 +421,7 @@ Sempre que identificar que precisa executar uma ou mais funções para responder
             else:
                 second_prompt_template: str = ""
 
-            if self.use_history:
+            if self.use_history and formatted_history:
                 third_prompt_template: str = f"""
 Você pode usar o histórico de conversas abaixo para responder perguntas relacionadas a interações anteriores com o usuário.
 Se o usuário perguntar sobre algo que já foi dito anteriormente, procure a informação no histórico.
@@ -587,11 +587,7 @@ class ManagerAgent(SimpleAgent):
 
                 formatted_history = "\n\n".join(
                     f"{item['timestamp']}{insert_score(item['score'])}\nUser: {item['interaction'].get('user', '')}\n"
-                    + "\n".join(
-                        f"{agent_name}: {resposta}"
-                        for agent_name, resposta in item["interaction"].items()
-                        if agent_name != "user"
-                    )
+                    + f"Agent: {item['interaction']['agent']}"
                     for item in self.history
                 )
 
@@ -668,7 +664,7 @@ O usuário fez a seguinte pergunta inicialmente:
 Os seguintes agentes responderam individualmente:
 {combined}
 
-Com base nessas respostas, gere uma única resposta unificada e natural para o usuário.
+Com base nessas respostas, gere uma única resposta unificada e natural para o usuário final.
         """
 
             return enriched_prompt
@@ -695,7 +691,7 @@ Com base nessas respostas, gere uma única resposta unificada e natural para o u
                     for agente_name, agente_response in agent.items():  # -> Esse for é sempre fixo em 1 item.
                         actual_conversation["interaction"][agente_name] = agente_response
 
-            actual_conversation["interaction"][self.agent_name] = agent_response
+            actual_conversation["interaction"]['agent'] = agent_response
 
             self.history.append(actual_conversation)
             self.history = self.history[-self.MAX_HISTORY:]  # -> Mantendo apenas os N itens no histórico.
