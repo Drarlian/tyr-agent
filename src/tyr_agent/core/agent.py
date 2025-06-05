@@ -200,7 +200,10 @@ Gere uma resposta natural para o usuário com base na mensagem atual:
         :return: True caso tenha dado certo | False caso tenha dado errado.
         """
         try:
-            return self.storage.delete_history(self.agent_name, interaction_id)
+            self.history = list(filter(lambda x: x["id"] != interaction_id, self.history))
+            response_delete_storage = self.storage.delete_history(self.agent_name, interaction_id)
+
+            return response_delete_storage
         except Exception as e:
             return False
 
