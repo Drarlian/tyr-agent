@@ -4,15 +4,16 @@ import google.generativeai as genai
 from typing import List, Dict, Optional, Callable, Union
 from datetime import datetime
 from tyr_agent.entities.entities import ManagerCallManyAgents, AgentCallInfo
+from tyr_agent.models.gemini_model import GeminiModel
+from tyr_agent.models.gpt_model import GPTModel
 from tyr_agent.storage.interaction_history import InteractionHistory
-from tyr_agent.mixins.file_mixins import FileMixin
 import uuid
 
 
-class SimpleAgent(FileMixin):
+class SimpleAgent:
     MAX_ALLOWED_HISTORY = 20
 
-    def __init__(self, prompt_build: str, agent_name: str, model: genai.GenerativeModel, storage: Optional[InteractionHistory] = None, max_history: int = 20, use_history: bool = True, use_score: bool = True, score_average: Union[int, float] = 3):
+    def __init__(self, prompt_build: str, agent_name: str, model: Union[GeminiModel, GPTModel], storage: Optional[InteractionHistory] = None, max_history: int = 20, use_history: bool = True, use_score: bool = True, score_average: Union[int, float] = 3):
         self.prompt_build: str = prompt_build
         self.agent_name: str = agent_name
 
@@ -30,77 +31,22 @@ class SimpleAgent(FileMixin):
             if use_score:
                 self._filter_history_by_score()
 
-        self.agent_model: genai.GenerativeModel = model
+        self.agent_model: Union[GeminiModel, GPTModel] = model
 
         self.MAX_HISTORY = min(max_history, self.MAX_ALLOWED_HISTORY)
         self.PROMPT_TEMPLATE = ""
 
     async def chat(self, user_input: str, streaming: bool = False, files: Optional[List[dict]] = None, save_history: bool = True) -> Optional[str]:
         try:
-            prompt: Union[str, list] = self.__generate_prompt(user_input)
-
-            if not prompt:
-                raise Exception("[ERROR] - Erro ao gerar o prompt.")
-
-            if files:
-                files_formated: List[dict] = [self.convert_item_to_gemini_file(item["file"], item["file_name"]) for item in files]
-                files_valid: List[dict] = [file for file in files_formated if file]
-                prompt = [prompt] + files_valid[:10]
-
-            response = await self.agent_model.generate_content_async(prompt, stream=True)
-            await response.resolve()
-            final_text: str= response.text.strip()
+            agent_response: str = self.agent_model.generate(user_input, files, self.prompt_build, self.history, self.use_history, self.use_score)
 
             if self.use_history and save_history:
-                self._update_history(user_input, [final_text], "simple")
+                self._update_history(user_input, [agent_response], "simple")
 
-            return final_text
+            return agent_response
         except Exception as e:
             print(f"❌ [SimpleAgent.chat] {type(e).__name__}: {e}")
             return None
-
-    def __generate_prompt(self, prompt_text: str) -> str:
-        try:
-            if not self.use_history or not self.history:
-                formatted_history = False
-            else:
-                def insert_score(score: Union[int, float, float]):
-                    if self.use_score:
-                        return f" - Score: {str(score) + '/5' if score is not None else 'Não consta'}"
-                    else:
-                        return ''
-
-                formatted_history = "\n".join(
-                    f"{item['timestamp']}{insert_score(item['score'])}\nUser: {item['interaction']['user']}\nAgent: {' | '.join(item['interaction']['agent'])}"
-                    for item in self.history
-                )
-
-            first_prompt_template: str = f"{self.prompt_build}\n"
-
-            if self.use_history and formatted_history:
-                second_prompt_template: str = f"""
-Você pode usar o histórico de conversas abaixo para responder perguntas relacionadas a interações anteriores com o usuário. 
-Se o usuário perguntar sobre algo que já foi dito anteriormente, procure a informação no histórico.
-{
-'''\nCada resposta do agente no histórico pode conter uma nota de 0 a 5, representando o quanto ela foi útil para o usuário. 
-Use essas notas como um indicativo da qualidade da resposta anterior. Priorize informações com notas mais altas e busque manter esse nível de qualidade em sua resposta atual.\n''' if self.use_score else ''
-}
-Histórico de Conversas:
-{formatted_history if formatted_history else "Não Consta."}
-"""
-            else:
-                second_prompt_template: str = ""
-
-            third_prompt_template: str = f"""
-Gere uma resposta natural para o usuário com base na mensagem atual:
-{prompt_text}"""
-
-            final_prompt_template: str = first_prompt_template + second_prompt_template + third_prompt_template
-
-            return final_prompt_template
-        except Exception as e:
-            print(f'[ERROR] - Ocorreu um erro durante a geração do prompt: {e}')
-            return ""
 
     def _update_history(self, user_input: str, agent_response: List[str], type_agent: str, called_functions: List[dict] | None = None, score: int | None = None) -> None:
         try:

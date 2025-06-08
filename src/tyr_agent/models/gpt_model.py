@@ -1,20 +1,27 @@
-# tyr_agent/models/gpt_model.py
-
-import openai
-from typing import Optional
+from openai import OpenAI
+from typing import Optional, Union
 from typing import List
+from tyr_agent.core.ai_config import configure_gpt
 
 
 class GPTModel:
-    def __init__(self, model_name: str, temperature: Optional[int, float] = 0.7, max_tokens: int = 1000):
-        self.model_name = model_name
+    def __init__(self, model_name: str, temperature: Union[int, float] = 0.7, max_tokens: int = 1000, api_key: Optional[str] = None):
+        self.client: OpenAI = configure_gpt(api_key)
+
+        if model_name == "economy":
+            self.model_name = "gpt-3.5-turbo"
+        elif model_name == "quality":
+            self.model_name = "gpt-4o"
+        else:
+            self.model_name = model_name
+
         self.temperature = temperature
         self._max_tokens = max_tokens
 
-    def generate(self, prompt_build: str, user_input: str, history: Optional[List[dict]]) -> str:
-        messages = self.__build_messages(prompt_build, user_input, history)
+    def generate(self, user_input: str, files: Optional[List[dict]], prompt_build: str, history: Optional[List[dict]], use_history: bool, use_score: bool) -> str:
+        messages = self.__build_messages(prompt_build, user_input, history, use_history, use_score)
 
-        response = openai.ChatCompletion.create(
+        response = self.client.chat.completions.create(
             model=self.model_name,
             messages=messages,
             temperature=self.temperature,
@@ -27,13 +34,17 @@ class GPTModel:
     async def async_generate(self, prompt_build: str, user_input: str, history: Optional[List[dict]]) -> str:
         pass
 
-    def __build_messages (self, prompt_build: str, user_input: str, history: Optional[List[dict]]) -> List[dict]:
+    def __build_messages (self, prompt_build: str, user_input: str, history: Optional[List[dict]], use_history: bool, use_score: bool) -> List[dict]:
         messages: List[dict] = [{"role": "system", "content": prompt_build}]
 
-        if history is not None:
+        if use_history:
             for interaction in history:
-                messages.append({"role": "user", "content": interaction["interaction"]["user"]})
-                messages.append({"role": "assistant", "content": interaction["interaction"]["agent"]})
+                user_text = interaction["interaction"]["user"]
+
+                messages.append({"role": "user", "content": user_text})
+
+                for agent_text in interaction["interaction"]["agent"]:
+                    messages.append({"role": "assistant", "content": agent_text})
 
         messages.append({"role": "user", "content": user_input})
 
