@@ -38,7 +38,7 @@ class SimpleAgent:
 
     async def chat(self, user_input: str, streaming: bool = False, files: Optional[List[dict]] = None, save_history: bool = True) -> Optional[str]:
         try:
-            agent_response: str = self.agent_model.generate(user_input, files, self.prompt_build, self.history, self.use_history, self.use_score)
+            agent_response: str = self.agent_model.generate(user_input, files, self.prompt_build, self.history, self.use_history)
 
             if self.use_history and save_history:
                 self._update_history(user_input, [agent_response], "simple")

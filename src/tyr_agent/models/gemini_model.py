@@ -1,35 +1,91 @@
 from typing import List, Optional, Union
-import google.generativeai as genai
+from google.genai import types
 from tyr_agent.mixins.file_mixins import FileMixin
 from tyr_agent.core.ai_config import configure_gemini
 
 
 class GeminiModel(FileMixin):
-    def __init__(self, model_name: str, api_key: Optional[str] = None):
-        configure_gemini(api_key)
-        self.model = genai.GenerativeModel(model_name)
+    def __init__(self, model_name: str, temperature: Union[int, float] = 0.7, max_tokens: int = 1000, api_key: Optional[str] = None):
+        self.client = configure_gemini(api_key)
 
-    def generate(self, user_input: str, files: Optional[List[dict]], prompt_build: str, history: Optional[List[dict]], use_history: bool, use_score: bool) -> str:
-        prompt = self.__generate_prompt(user_input, prompt_build, history, use_history, use_score)
+        self.model_name = model_name
 
-        if files:
-            files_formated: List[dict] = [self.convert_item_to_gemini_file(item["file"], item["file_name"]) for item in files]
-            files_valid: List[dict] = [file for file in files_formated if file]
-            prompt = [prompt] + files_valid[:10]
+        self.temperature = temperature
+        self.max_tokens = max_tokens
 
-        if not prompt:
+    def generate(self, user_input: str, files: Optional[List[dict]], prompt_build: str, history: Optional[List[dict]], use_history: bool) -> str:
+        messages = self.__build_messages(user_input, history, use_history)
+
+        # if files:
+        #     files_formated: List[dict] = [self.convert_item_to_gemini_file(item["file"], item["file_name"]) for item in files]
+        #     files_valid: List[dict] = [file for file in files_formated if file]
+        #     prompt = [prompt] + files_valid[:10]
+
+        if not messages:
             raise Exception("[ERROR] - Erro ao gerar o prompt do GEMINI.")
 
-        response = self.model.generate_content(prompt, stream=True)
-        response.resolve()
+        response = self.client.models.generate_content(
+            model=self.model_name,
+            contents=messages,
+            config=types.GenerateContentConfig(
+                system_instruction=prompt_build,
+                max_output_tokens=self.max_tokens,
+                temperature=self.temperature,
+            )
+        )
+
         return response.text.strip()
 
-    async def async_generate(self, user_input: str, prompt_build: str, history: Optional[List[dict]], use_history: bool, use_score: bool) -> str:
-        prompt = self.__generate_prompt(user_input, prompt_build, history, use_history, use_score)
+    async def async_generate(self, user_input: str, files: Optional[List[dict]], prompt_build: str, history: Optional[List[dict]], use_history: bool) -> str:
+        messages = self.__build_messages(user_input, history, use_history)
 
-        response = await self.model.generate_content_async(prompt, stream=True)
-        await response.resolve()
-        return response.text.strip()
+        if not messages:
+            raise Exception("[ERROR] - Erro ao gerar o prompt do GEMINI.")
+
+        final_response: str = ""
+        for chunk in self.client.models.generate_content_stream(
+                model=self.model_name,
+                contents=messages,
+                config=types.GenerateContentConfig(
+                    system_instruction=prompt_build,
+                    max_output_tokens=self.max_tokens,
+                    temperature=self.temperature,
+                )
+            ):
+            final_response += chunk.text
+
+        return final_response.strip()
+
+    def __build_messages(self, user_input: str, history: Optional[List[dict]], use_history: bool):
+        messages: List = []
+
+        if use_history:
+            for interaction in history:
+                user_text = interaction["interaction"]["user"]
+
+                messages.append(
+                    types.Content(
+                        role="user",
+                        parts=[types.Part.from_text(text=user_text)]
+                    )
+                )
+
+                for agent_text in interaction["interaction"]["agent"]:
+                    messages.append(
+                        types.Content(
+                            role="model",
+                            parts=[types.Part.from_text(text=agent_text)]
+                        )
+                    )
+
+        messages.append(
+            types.Content(
+                role="user",
+                parts=[types.Part.from_text(text=user_input)]
+            )
+        )
+
+        return messages
 
     def __generate_prompt(self, user_input: str, prompt_build: str, history: Optional[List[dict]], use_history: bool, use_score: bool) -> str:
         try:

@@ -16,25 +16,25 @@ class GPTModel:
             self.model_name = model_name
 
         self.temperature = temperature
-        self._max_tokens = max_tokens
+        self.max_tokens = max_tokens
 
-    def generate(self, user_input: str, files: Optional[List[dict]], prompt_build: str, history: Optional[List[dict]], use_history: bool, use_score: bool) -> str:
-        messages = self.__build_messages(prompt_build, user_input, history, use_history, use_score)
+    def generate(self, user_input: str, files: Optional[List[dict]], prompt_build: str, history: Optional[List[dict]], use_history: bool) -> str:
+        messages = self.__build_messages(prompt_build, user_input, history, use_history)
 
         response = self.client.chat.completions.create(
             model=self.model_name,
             messages=messages,
             temperature=self.temperature,
-            max_tokens=self._max_tokens,
+            max_tokens=self.max_tokens,
             stream=False
         )
 
         return response.choices[0].message.content.strip()
 
-    async def async_generate(self, prompt_build: str, user_input: str, history: Optional[List[dict]]) -> str:
+    async def async_generate(self, prompt_build: str, files: Optional[List[dict]], user_input: str, history: Optional[List[dict]], use_history: bool) -> str:
         pass
 
-    def __build_messages (self, prompt_build: str, user_input: str, history: Optional[List[dict]], use_history: bool, use_score: bool) -> List[dict]:
+    def __build_messages (self, prompt_build: str, user_input: str, history: Optional[List[dict]], use_history: bool) -> List[dict]:
         messages: List[dict] = [{"role": "system", "content": prompt_build}]
 
         if use_history:
