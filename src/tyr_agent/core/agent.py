@@ -237,61 +237,20 @@ class SimpleAgent:
 class ComplexAgent(SimpleAgent):
     MAX_ALLOWED_HISTORY = 20
 
-    def __init__(self, prompt_build: str, agent_name: str, model: genai.GenerativeModel, functions: Optional[dict[str, Callable]] = None, storage: Optional[InteractionHistory] = None, max_history: int = 20, use_history: bool = True, use_score: bool = True, score_average: Union[int, float] = 3):
+    def __init__(self, prompt_build: str, agent_name: str, model: Union[GeminiModel, GPTModel], functions: Optional[List[Callable]] = None, storage: Optional[InteractionHistory] = None, max_history: int = 20, use_history: bool = True, use_score: bool = True, score_average: Union[int, float] = 3):
         super().__init__(prompt_build, agent_name, model, storage, max_history, use_history, use_score, score_average)
         self.functions: dict[str, Callable] = functions or {}
 
         self.PROMPT_TEMPLATE = ""
 
     async def chat(self, user_input: str, streaming: bool = False, files: Optional[List[dict]] = None, save_history: bool = True) -> str | None:
-        # Primeira rodada:
-        prompt: Union[str, list] = self.__generate_prompt_with_functions(user_input)
-
-        if not prompt:
-            raise Exception("[ERROR] - Erro ao gerar o prompt.")
-
         try:
-            if files:
-                files_formated: List[dict] = [self.convert_item_to_gemini_file(item["file"], item["file_name"]) for item in files]
-                files_valid: List[dict] = [file for file in files_formated if file]
-                prompt = [prompt] + files_valid[:10]
-
-            response = await self.agent_model.generate_content_async(prompt, stream=True)
-            await response.resolve()
-            response_text = response.text.strip()
-
-            func_calls = self.__extract_function_calls(response_text)
-
-            if not func_calls:
-                if self.use_history and save_history:
-                    self._update_history(user_input, [response_text], "complex")
-                return response_text
-
-            # Armazena  o histórico de execução das chamadas:
-            calls_history: List[dict] = []
-
-            # Executa as múltiplas funções solicitadas:
-            results = {}
-            for call in func_calls["functions_to_execute"]:
-                result = self.__execute_function(call)
-                results[call['function_name']] = result
-                calls_history.append({"name": call["function_name"], "params": call["parameters"], "result": result})
-
-            # Criando o prompt final com o resultado da execução da função:
-            final_prompt = self.__generate_final_prompt(user_input, results)
-
-            if not final_prompt:
-                return "Não foi possível obter uma resposta no momento."
-
-            # Executando o prompt final:
-            final_response = await self.agent_model.generate_content_async(final_prompt, stream=True)
-            await final_response.resolve()
-            final_response_text: str = final_response.text.strip()
+            agent_response = self.agent_model.generate_with_functions(user_input, files, self.prompt_build, self.history, self.use_history, self.functions)
 
             if self.use_history and save_history:
-                self._update_history(user_input, [func_calls.get("message_to_user", ""), final_response_text], "complex", calls_history)
+                self._update_history(user_input, [agent_response], "complex")
 
-            return final_response_text
+            return agent_response
         except Exception as e:
             print(f'[ERROR] - Ocorreu um erro durante a comunicação com o agente: {e}')
             return None

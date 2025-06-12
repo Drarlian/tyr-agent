@@ -1,4 +1,4 @@
-from typing import List, Optional, Union
+from typing import List, Optional, Union, Callable, Dict, Any
 from google.genai import types
 from tyr_agent.mixins.file_mixins import FileMixin
 from tyr_agent.core.ai_config import configure_gemini
@@ -56,6 +56,50 @@ class GeminiModel(FileMixin):
 
         return final_response.strip()
 
+    def generate_with_functions(self, user_input: str, files: Optional[List[dict]], prompt_build: str, history: Optional[List[dict]], use_history: bool, functions: List[Callable]):
+        messages = self.__build_messages(user_input, history, use_history)
+
+        if not messages:
+            raise Exception("[ERROR] - Erro ao gerar o prompt do GEMINI.")
+
+        response = self.client.models.generate_content(
+            model=self.model_name,
+            contents=messages,
+            config=types.GenerateContentConfig(
+                system_instruction=prompt_build,
+                max_output_tokens=self.max_tokens,
+                temperature=self.temperature,
+                tools=functions if functions else [],
+                automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True)
+            ),
+        )
+
+        # Pegando as funções chamadas pelo modelo:
+        calls = response.function_calls
+
+        # Validando se tive alguma chamada de função:
+        if not calls:
+            return response.text.strip()  # Nenhuma função chamada, retorna direto
+
+        tool_content = self.__execute_functions(calls, functions)
+
+        # Parte 5 - Segunda chamada: modelo continua raciocínio com base na resposta da função
+        final_response = self.client.models.generate_content(
+            model=self.model_name,
+            contents=[
+                *messages,
+                response.candidates[0].content,  # chamada da função pelo modelo
+                tool_content  # resposta da função
+            ],
+            config=types.GenerateContentConfig(
+                system_instruction=prompt_build,
+                max_output_tokens=self.max_tokens,
+                temperature=self.temperature
+            ),
+        )
+
+        return final_response.text.strip()
+
     def __build_messages(self, user_input: str, history: Optional[List[dict]], use_history: bool):
         messages: List = []
 
@@ -87,45 +131,29 @@ class GeminiModel(FileMixin):
 
         return messages
 
-    def __generate_prompt(self, user_input: str, prompt_build: str, history: Optional[List[dict]], use_history: bool, use_score: bool) -> str:
-        try:
-            if not use_history or not history:
-                formatted_history = False
-            else:
-                def insert_score(score: Union[int, float, float]):
-                    if use_score:
-                        return f" - Score: {str(score) + '/5' if score is not None else 'Não consta'}"
-                    else:
-                        return ''
+    def __execute_functions(self, calls, functions: List[Callable]):
+        # Parte 1: Criando um dicionário com o nome das funções e as funções:
+        dict_functions: Dict[str, Callable] = {fn.__name__: fn for fn in functions}
 
-                formatted_history = "\n".join(
-                    f"{item['timestamp']}{insert_score(item['score'])}\nUser: {item['interaction']['user']}\nAgent: {' | '.join(item['interaction']['agent'])}"
-                    for item in history
-                )
+        # Parte 2:
+        tool_parts: list = []
+        for call in calls:
+            fn = dict_functions.get(call.name)
+            if fn is None:
+                raise Exception(f"[ERROR] - Função '{call.name}' não encontrada.")
 
-            first_prompt_template: str = f"{prompt_build}\n"
+            try:
+                result = fn(**call.args)
+            except Exception as e:
+                result = {"error": "Ocorreu um erro durante a execução da função!"}
 
-            if use_history and formatted_history:
-                second_prompt_template: str = f"""
-Você pode usar o histórico de conversas abaixo para responder perguntas relacionadas a interações anteriores com o usuário. 
-Se o usuário perguntar sobre algo que já foi dito anteriormente, procure a informação no histórico.
-{
-'''\nCada resposta do agente no histórico pode conter uma nota de 0 a 5, representando o quanto ela foi útil para o usuário. 
-Use essas notas como um indicativo da qualidade da resposta anterior. Priorize informações com notas mais altas e busque manter esse nível de qualidade em sua resposta atual.\n''' if use_score else ''
-}
-Histórico de Conversas:
-{formatted_history if formatted_history else "Não Consta."}
-"""
-            else:
-                second_prompt_template: str = ""
+            part = types.Part.from_function_response(
+                name=call.name,
+                response={"result": result}
+            )
+            tool_parts.append(part)
 
-            third_prompt_template: str = f"""
-Gere uma resposta natural para o usuário com base na mensagem atual:
-{user_input}"""
+        # Parte 3 - Cria o conteúdo do resultado das funções:
+        tool_content = types.Content(role="tool", parts=tool_parts)
 
-            final_prompt_template: str = first_prompt_template + second_prompt_template + third_prompt_template
-
-            return final_prompt_template
-        except Exception as e:
-            print(f'[ERROR] - Ocorreu um erro durante a geração do prompt: {e}')
-            return ""
+        return tool_content

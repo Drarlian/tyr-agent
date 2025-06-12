@@ -34,6 +34,9 @@ class GPTModel:
     async def async_generate(self, prompt_build: str, files: Optional[List[dict]], user_input: str, history: Optional[List[dict]], use_history: bool) -> str:
         pass
 
+    def generate_with_functions(self, user_input: str, files: Optional[List[dict]], prompt_build: str, history: Optional[List[dict]], use_history: bool, functions: dict):
+        pass
+
     def __build_messages (self, prompt_build: str, user_input: str, history: Optional[List[dict]], use_history: bool) -> List[dict]:
         messages: List[dict] = [{"role": "system", "content": prompt_build}]
 
