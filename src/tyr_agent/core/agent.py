@@ -17,8 +17,8 @@ class SimpleAgent:
         self.prompt_build: str = prompt_build
         self.agent_name: str = agent_name
 
-        self.storage: InteractionHistory | None = None
-        self.history: List[dict] | None = None
+        self.storage: Optional[InteractionHistory] = None
+        self.history: Optional[List[dict]] = None
         self.use_history: bool = use_history
 
         self.use_score: bool = use_score
@@ -239,7 +239,7 @@ class ComplexAgent(SimpleAgent):
 
     def __init__(self, prompt_build: str, agent_name: str, model: Union[GeminiModel, GPTModel], functions: Optional[List[Callable]] = None, storage: Optional[InteractionHistory] = None, max_history: int = 20, use_history: bool = True, use_score: bool = True, score_average: Union[int, float] = 3):
         super().__init__(prompt_build, agent_name, model, storage, max_history, use_history, use_score, score_average)
-        self.functions: dict[str, Callable] = functions or {}
+        self.functions: Optional[List[Callable]] = functions or {}
 
         self.PROMPT_TEMPLATE = ""
 

@@ -56,7 +56,7 @@ class GeminiModel(FileMixin):
 
         return final_response.strip()
 
-    def generate_with_functions(self, user_input: str, files: Optional[List[dict]], prompt_build: str, history: Optional[List[dict]], use_history: bool, functions: List[Callable]):
+    def generate_with_functions(self, user_input: str, files: Optional[List[dict]], prompt_build: str, history: Optional[List[dict]], use_history: bool, functions: Optional[List[Callable]]):
         messages = self.__build_messages(user_input, history, use_history)
 
         if not messages:
@@ -77,7 +77,7 @@ class GeminiModel(FileMixin):
         # Pegando as funções chamadas pelo modelo:
         calls = response.function_calls
 
-        # Validando se tive alguma chamada de função:
+        # Validando se teve alguma chamada de função:
         if not calls:
             return response.text.strip()  # Nenhuma função chamada, retorna direto
 
