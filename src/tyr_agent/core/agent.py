@@ -237,15 +237,15 @@ class SimpleAgent:
 class ComplexAgent(SimpleAgent):
     MAX_ALLOWED_HISTORY = 20
 
-    def __init__(self, prompt_build: str, agent_name: str, model: Union[GeminiModel, GPTModel], functions: Optional[List[Callable]] = None, storage: Optional[InteractionHistory] = None, max_history: int = 20, use_history: bool = True, use_score: bool = True, score_average: Union[int, float] = 3):
+    def __init__(self, prompt_build: str, agent_name: str, model: Union[GeminiModel, GPTModel], functions: Optional[List[Callable]] = None, final_prompt: Optional[str] = None, storage: Optional[InteractionHistory] = None, max_history: int = 20, use_history: bool = True, use_score: bool = True, score_average: Union[int, float] = 3):
         super().__init__(prompt_build, agent_name, model, storage, max_history, use_history, use_score, score_average)
         self.functions: Optional[List[Callable]] = functions or {}
 
-        self.PROMPT_TEMPLATE = ""
+        self.final_prompt = final_prompt
 
     async def chat(self, user_input: str, streaming: bool = False, files: Optional[List[dict]] = None, save_history: bool = True) -> str | None:
         try:
-            agent_response = self.agent_model.generate_with_functions(user_input, files, self.prompt_build, self.history, self.use_history, self.functions)
+            agent_response = self.agent_model.generate_with_functions(user_input, files, self.prompt_build, self.history, self.use_history, self.functions, self.final_prompt)
 
             if self.use_history and save_history:
                 self._update_history(user_input, [agent_response], "complex")
@@ -254,121 +254,6 @@ class ComplexAgent(SimpleAgent):
         except Exception as e:
             print(f'[ERROR] - Ocorreu um erro durante a comunicação com o agente: {e}')
             return None
-
-    def __extract_function_calls(self, response_text: str) -> Optional[dict]:
-        try:
-            response_text = response_text.removeprefix('```json\n').removesuffix("\n```")
-            response_text = response_text.replace("\n", "").replace("`", "").replace("´", "")
-            data = json.loads(response_text)
-            if isinstance(data, dict):
-                return data if data.get("call_functions") else []
-            return None
-        except json.JSONDecodeError:
-            return None
-
-    def __execute_function(self, call: dict) -> str:
-        name = call.get("function_name")
-        params = call.get("parameters", {})
-        func = self.functions.get(name)
-
-        if not func:
-            return f"Função '{name}' não encontrada."
-
-        try:
-            result = func(**params)
-            return f"O resultado é: {result}"
-        except Exception as e:
-            return f"Erro ao executar '{name}': {e}"
-
-    def __generate_prompt_with_functions(self, prompt_text: str) -> str:
-        import inspect
-
-        try:
-            if not self.use_history or not self.history:
-                formatted_history = False
-            else:
-                def insert_score(score: Union[int, float, float]):
-                    if self.use_score:
-                        return f" - Score: {str(score)+'/5' if score is not None else 'Não consta'}"
-                    else:
-                        return ''
-
-                formatted_history = "\n".join(
-                    f"{item['timestamp']}{insert_score(item['score'])}\nUser: {item['interaction']['user']}\nAgent: {' | '.join(item['interaction']['agent'])}"
-                    for item in self.history
-                )
-
-            function_list = "\n".join(
-                f"- {name}{inspect.signature(f)}"
-                for name, f in self.functions.items()
-            )
-
-            call_function_explanation = """
-{
-    "call_functions": true, 
-    "functions_to_execute": 
-        [
-            {
-                "function_name": "nome_da_funcao", 
-                "parameters": {"parametro_1": "valor_parametro_1", "parametro_n": "valor_parametro_n"}
-            },
-        ],
-    "message_to_user": "texto explicativo amigável"
-}"""
-
-            first_prompt_template: str = f"{self.prompt_build}\n"
-
-            if self.functions:
-                second_prompt_template: str = f"""
-Você tem acesso às seguintes funções que podem ser utilizadas para responder perguntas do usuário:
-{function_list}
-
-Sempre que identificar que precisa executar uma ou mais funções para responder corretamente, gere uma resposta no formato JSON no seguinte formato:
-{call_function_explanation}
-                """
-            else:
-                second_prompt_template: str = ""
-
-            if self.use_history and formatted_history:
-                third_prompt_template: str = f"""
-Você pode usar o histórico de conversas abaixo para responder perguntas relacionadas a interações anteriores com o usuário.
-Se o usuário perguntar sobre algo que já foi dito anteriormente, procure a informação no histórico.
-{
-'''\nCada resposta do agente no histórico pode conter uma nota de 0 a 5, representando o quanto ela foi útil para o usuário. 
-Use essas notas como um indicativo da qualidade da resposta anterior. Priorize informações com notas mais altas e busque manter esse nível de qualidade em sua resposta atual.\n''' if self.use_score else ''
-}
-Histórico de Conversas:
-{formatted_history if formatted_history else "Não Consta."}
-                """
-            else:
-                third_prompt_template: str = ""
-
-            fourth_prompt_template: str = f"""
-Mensagem atual:
-{prompt_text}"""
-
-            final_prompt_template = first_prompt_template + second_prompt_template + third_prompt_template + fourth_prompt_template
-
-            return final_prompt_template
-        except Exception as e:
-            print(f'[ERROR] - Ocorreu um erro durante a geração do prompt: {e}')
-            return ""
-
-    def __generate_final_prompt(self, prompt_text: str, results: Dict[str, str], save_history: bool = True) -> str:
-        # Segunda rodada: prompt enriquecido com resultados
-        enriched_prompt = f"""
-Você é um agente capaz de executar algumas funções.
-
-O usuário fez a seguinte pergunta inicialmente:
-{prompt_text}
-
-Como um agente você solicitou a execução das funções abaixo e recebeu o retorno, veja:
-{json.dumps(results, indent=2, ensure_ascii=False)}
-
-Com base nos resultados das funções, gere uma resposta natural para o usuário.
-        """
-
-        return enriched_prompt
 
 
 class ManagerAgent(SimpleAgent):

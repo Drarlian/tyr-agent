@@ -35,7 +35,7 @@ class GPTModel:
     async def async_generate(self, prompt_build: str, files: Optional[List[dict]], user_input: str, history: Optional[List[dict]], use_history: bool) -> str:
         pass
 
-    def generate_with_functions(self, user_input: str, files: Optional[List[dict]], prompt_build: str, history: Optional[List[dict]], use_history: bool, functions: Optional[List[Callable]]):
+    def generate_with_functions(self, user_input: str, files: Optional[List[dict]], prompt_build: str, history: Optional[List[dict]], use_history: bool, functions: Optional[List[Callable]], final_prompt: Optional[str]):
         messages = self.__build_messages(prompt_build, user_input, history, use_history)
 
         # Criando um array com as funções no formato que o GPT precisa:
@@ -61,13 +61,17 @@ class GPTModel:
 
         new_messages = self.__execute_functions(calls, messages, functions)
 
+        # Alterando o prompt "system" das mensagens pra o prompt especial definido na inicialização do agente:
+        if final_prompt:
+            new_messages[0]["content"] = final_prompt
+
+        # Parte 5 - Segunda chamada: modelo continua raciocínio com base na resposta da função
         response_answer_functions = self.client.chat.completions.create(
             model=self.model_name,
             messages=new_messages,
             temperature=self.temperature,
             max_tokens=self.max_tokens,
             stream=False,
-            tools=tools
         )
 
         return response_answer_functions.choices[0].message.content.strip()

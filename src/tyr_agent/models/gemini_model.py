@@ -56,7 +56,7 @@ class GeminiModel(FileMixin):
 
         return final_response.strip()
 
-    def generate_with_functions(self, user_input: str, files: Optional[List[dict]], prompt_build: str, history: Optional[List[dict]], use_history: bool, functions: Optional[List[Callable]]):
+    def generate_with_functions(self, user_input: str, files: Optional[List[dict]], prompt_build: str, history: Optional[List[dict]], use_history: bool, functions: Optional[List[Callable]], final_prompt: Optional[str]):
         messages = self.__build_messages(user_input, history, use_history)
 
         if not messages:
@@ -69,7 +69,7 @@ class GeminiModel(FileMixin):
                 system_instruction=prompt_build,
                 max_output_tokens=self.max_tokens,
                 temperature=self.temperature,
-                tools=functions if functions else [],
+                tools=functions if functions else None,
                 automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True)
             ),
         )
@@ -92,7 +92,7 @@ class GeminiModel(FileMixin):
                 tool_content  # resposta da função
             ],
             config=types.GenerateContentConfig(
-                system_instruction=prompt_build,
+                system_instruction=final_prompt if final_prompt is not None else prompt_build,
                 max_output_tokens=self.max_tokens,
                 temperature=self.temperature
             ),
