@@ -14,15 +14,7 @@ class GeminiModel(FileMixin):
         self.max_tokens = max_tokens
 
     def generate(self, user_input: str, files: Optional[List[dict]], prompt_build: str, history: Optional[List[dict]], use_history: bool) -> str:
-        messages = self.__build_messages(user_input, history, use_history)
-
-        # if files:
-        #     files_formated: List[dict] = [self.convert_item_to_gemini_file(item["file"], item["file_name"]) for item in files]
-        #     files_valid: List[dict] = [file for file in files_formated if file]
-        #     prompt = [prompt] + files_valid[:10]
-
-        if not messages:
-            raise Exception("[ERROR] - Erro ao gerar o prompt do GEMINI.")
+        messages = self.__create_messages(user_input, files, history, use_history)
 
         response = self.client.models.generate_content(
             model=self.model_name,
@@ -37,10 +29,7 @@ class GeminiModel(FileMixin):
         return response.text.strip()
 
     async def async_generate(self, user_input: str, files: Optional[List[dict]], prompt_build: str, history: Optional[List[dict]], use_history: bool) -> str:
-        messages = self.__build_messages(user_input, history, use_history)
-
-        if not messages:
-            raise Exception("[ERROR] - Erro ao gerar o prompt do GEMINI.")
+        messages = self.__create_messages(user_input, files, history, use_history)
 
         final_response: str = ""
         for chunk in self.client.models.generate_content_stream(
@@ -57,10 +46,7 @@ class GeminiModel(FileMixin):
         return final_response.strip()
 
     def generate_with_functions(self, user_input: str, files: Optional[List[dict]], prompt_build: str, history: Optional[List[dict]], use_history: bool, functions: Optional[List[Callable]], final_prompt: Optional[str]):
-        messages = self.__build_messages(user_input, history, use_history)
-
-        if not messages:
-            raise Exception("[ERROR] - Erro ao gerar o prompt do GEMINI.")
+        messages = self.__create_messages(user_input, files, history, use_history)
 
         response = self.client.models.generate_content(
             model=self.model_name,
@@ -99,6 +85,22 @@ class GeminiModel(FileMixin):
         )
 
         return final_response.text.strip()
+
+    def __create_messages(self, user_input: str, files: Optional[List[dict]], history: Optional[List[dict]], use_history: bool):
+        messages = self.__build_messages(user_input, history, use_history)
+
+        if files:
+            files_formated = [self.convert_item_to_gemini_part(item["file"], item["file_name"]) for item in files]
+            files_valid = [file for file in files_formated if file]
+
+            # Adicionando os arquivos identificados dentro do parts da pergunta atual do usuário:
+            if files_valid:
+                messages[-1].parts.extend(files_valid[:10])
+
+        if not messages:
+            raise Exception("[ERROR] - Erro ao gerar o prompt do GEMINI.")
+
+        return messages
 
     def __build_messages(self, user_input: str, history: Optional[List[dict]], use_history: bool):
         messages: List = []

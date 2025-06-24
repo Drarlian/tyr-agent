@@ -1,11 +1,10 @@
 from typing import Optional, Union
 from io import BytesIO
-import base64
-import mimetypes
+from google.genai import types
 
 
 class FileMixin:
-    def convert_item_to_gemini_file(self, file: Union[str, BytesIO], file_name: str) -> dict:
+    def convert_item_to_gemini_part(self, file: Union[str, BytesIO], file_name: str) -> Optional[types.Part]:
         """
         Converte um path, base64 ou BytesIO para o formato ideal para ser enviado na requisição do Gemini.
         :param file: Arquivo a ser enviado, podendo ser path, base64 ou BytesIO.
@@ -13,34 +12,45 @@ class FileMixin:
         :return: Retorna um dicionário no formato ideal para ser enviado via Gemini.
         """
         try:
-            # Obtendo os bytes do arquivo:
-            if isinstance(file, str):
-                bytes_file = self.__convert_base64_to_bytes(file)  # base64
-                if bytes_file is None:  # path
-                    with open(file, "rb") as f:
-                        bytes_file = f.read()
-            elif isinstance(file, BytesIO):
-                bytes_file = file.read()
-            else:
-                raise ValueError("Tipo de arquivo não suportado.")
+            bytes_file = self.__get_file_bytes(file)
+            if not bytes_file:
+                return None
 
-            # Obtendo o mime_type do arquivo:
             mime_type = self.__detect_mime_type(file_name)
-
-            # Construindo o formato do Gemini para arquivos:
-            file_format = {
-                    "mime_type": mime_type,
-                    "data": bytes_file
-            }
 
             if mime_type == "application/octet-stream":
                 raise ValueError(f"Tipo MIME não suportado ou não reconhecido para o arquivo '{file_name}'.")
 
-            return file_format
-        except Exception:
-            return {}
+            return types.Part.from_bytes(data=bytes_file, mime_type=mime_type)
+        except Exception as e:
+            return None
+
+    def __get_file_bytes(self, file: Union[str, BytesIO]) -> Optional[bytes]:
+        """
+        Pega os bytes de um arquivo, seja via path, base64 ou BytesIO.
+        :param file: Arquivo que terá seus bytes extraídos.
+        :return:
+        """
+        if isinstance(file, str):
+            bytes_file = self.__convert_base64_to_bytes(file)
+            if bytes_file is None:  # Não é base64, então é path.
+                try:
+                    with open(file, "rb") as f:
+                        bytes_file = f.read()
+                except Exception:
+                    return None
+            return bytes_file
+        elif isinstance(file, BytesIO):
+            return file.read()
+        return None
 
     def __detect_mime_type(self, file_name: str) -> str:
+        """
+        Detecta o tipo do arquivo informado baseado no nome dele e retorno mime type dele.
+        :param file_name: Nome do arquivo a ser analisado.
+        :return: Retorna o tipo mime do arquivo recebido.
+        """
+        import mimetypes
         from pathlib import Path
 
         mime_map = {
@@ -66,6 +76,8 @@ class FileMixin:
         :param string_base64: String a ser validada.
         :return: Retorna os bytes ou levanta None se não for válido.
         """
+        import base64
+
         try:
             if string_base64.startswith("data:"):
                 header, b64data = string_base64.split(",", 1)
