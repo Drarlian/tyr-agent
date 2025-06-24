@@ -5,6 +5,7 @@ from .utils.image_utils import image_to_base64
 from .mixins.file_mixins import FileMixin
 from .models.gemini_model import GeminiModel
 from .models.gpt_model import GPTModel
+from .entities.entities import AgentInteraction, AgentHistory
 
 __all__ = [
     "SimpleAgent",
@@ -13,5 +14,7 @@ __all__ = [
     "configure_gemini",
     "InteractionHistory",
     "GeminiModel",
-    "GPTModel"
+    "GPTModel",
+    "AgentInteraction",
+    "AgentHistory"
 ]

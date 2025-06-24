@@ -1,4 +1,4 @@
-from typing import TypedDict, List, TYPE_CHECKING
+from typing import TypedDict, List, Optional, Union, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from tyr_agent import SimpleAgent, ComplexAgent
@@ -17,3 +17,15 @@ class ManagerCallManyAgents(TypedDict):
 class AgentCallInfo(TypedDict):
     agent: "SimpleAgent | ComplexAgent"
     message: str
+
+
+class AgentInteraction(TypedDict):
+    user: str
+    agent: List[str]
+
+
+class AgentHistory(TypedDict):
+    timestamp: Optional[str]
+    interaction: AgentInteraction
+    score: Optional[Union[int, float]]
+    type_agent: str

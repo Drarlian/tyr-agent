@@ -3,7 +3,7 @@ import asyncio
 import google.generativeai as genai
 from typing import List, Dict, Optional, Callable, Union
 from datetime import datetime
-from tyr_agent.entities.entities import ManagerCallManyAgents, AgentCallInfo
+from tyr_agent.entities.entities import ManagerCallManyAgents, AgentCallInfo, AgentHistory, AgentInteraction
 from tyr_agent.models.gemini_model import GeminiModel
 from tyr_agent.models.gpt_model import GPTModel
 from tyr_agent.storage.interaction_history import InteractionHistory
@@ -13,18 +13,19 @@ import uuid
 class SimpleAgent:
     MAX_ALLOWED_HISTORY = 20
 
-    def __init__(self, prompt_build: str, agent_name: str, model: Union[GeminiModel, GPTModel], storage: Optional[InteractionHistory] = None, max_history: int = 20, use_history: bool = True, use_score: bool = True, score_average: Union[int, float] = 3):
+    def __init__(self, prompt_build: str, agent_name: str, model: Union[GeminiModel, GPTModel], storage: Optional[InteractionHistory] = None, max_history: int = 20, use_storage: bool = True, use_history: bool = True, use_score: bool = True, score_average: Union[int, float] = 3):
         self.prompt_build: str = prompt_build
         self.agent_name: str = agent_name
 
         self.storage: Optional[InteractionHistory] = None
         self.history: Optional[List[dict]] = None
+        self.use_storage: bool = use_storage
         self.use_history: bool = use_history
 
         self.use_score: bool = use_score
         self.score_average: Union[int, float] = score_average if self._is_valid_score(score_average) else 3
 
-        if use_history:
+        if use_storage and use_history:
             self.storage = storage or InteractionHistory(f"{agent_name.lower()}_history.json")
             self.history = self.storage.load_history(agent_name)
 
@@ -71,16 +72,49 @@ class SimpleAgent:
     def get_agent_history(self) -> List[dict]:
         return self.history
 
-    def create_agent_history(self, storage: Optional[InteractionHistory] = None) -> None:
+    def create_agent_history_with_storage(self, storage: Optional[InteractionHistory] = None, use_history: bool = True) -> None:
         """
-        Cria uma instância para de histórico o agente atual.
-        Caso já exista um histórico para o agente atual, apenas conecta o histórico com o agente.
-        :param storage: Histórico a ser carregado, caso não seja passado será criado/procurado um.
+        Cria uma instância de histórico para o agente a partir de um storage.
+        Caso já exista um histórico para o agente, apenas conecta o histórico com o agente.
+        :param storage: Histórico (Storage) a ser carregado, caso não seja passado será criado/procurado um.
+        :param use_history: Define qual o novo valor de use_history do agente, por padrão é True.
         :return: Não retorna nada.
         """
         self.storage: InteractionHistory | None = storage or InteractionHistory(f"{self.agent_name.lower()}_history.json")
         self.history: List[dict] | None = self.storage.load_history(self.agent_name)
-        self.use_history: bool = True
+        self.use_history: bool = use_history
+
+    def create_agent_history(self, new_history: List[AgentHistory], use_history: bool = True) -> bool:
+        """
+        Cria um histórico para o agente a patir de uma lista de AgentHistory.
+        Caso já exista um histórico para o agente, reescreve o histórico atual.
+        Altera o valor use_history para true automaticamente.
+        :param new_history: Histórico (History) a ser carregado.
+        :param use_history: Define qual o novo valor de use_history do agente, por padrão é True.
+        :return: Retorna true caso tudo tenha dado certo e false caso tenha acontecido algum problema.
+        """
+        try:
+            self.history: List[dict] = self._format_history(new_history)
+            self.use_history: bool = use_history
+            return True
+        except Exception as e:
+            return False
+
+    def extend_agent_history(self, extended_history: List[AgentHistory]) -> bool:
+        """
+        Insere novos registros no histórico do agente através de uma lista de AgentHistory.
+        Apenas insere os novos registro se o agente tiver um histórico.
+        :param extended_history: Histórico (History) a ser carregado.
+        :return: Retorna true caso tudo tenha dado certo e false caso tenha acontecido algum problema.
+        """
+        try:
+            if self.history:
+                self.history.extend(self._format_history(extended_history))
+                return True
+            else:
+                return False
+        except Exception as e:
+            return False
 
     def remove_agent_history(self) -> None:
         """
@@ -233,12 +267,35 @@ class SimpleAgent:
         """
         self.history = list(filter(lambda x: (x.get("score") is None or isinstance(x.get("score"), (int, float))) and (x.get("score") is None or x.get("score") >= self.score_average), self.history))
 
+    def _format_history(self, target_history: List[AgentHistory]) -> List[dict]:
+        temp_history: List[dict] = []
+        for h in target_history:
+            if h.get("timestamp") is None:
+                timestamp: str = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+            else:
+                timestamp: str = h.get("timestamp")
+
+            temp_history.append(
+                {
+                    "id": str(uuid.uuid4()),
+                    "timestamp": timestamp,
+                    "interaction": {
+                        "user": h["interaction"]["user"],
+                        "agent": h["interaction"]["agent"]
+                    },
+                    "called_functions": [],
+                    "type_agent": h["type_agent"],
+                    "score": h.get("score") if h.get("score", False) else None,
+                }
+            )
+        return temp_history
+
 
 class ComplexAgent(SimpleAgent):
     MAX_ALLOWED_HISTORY = 20
 
-    def __init__(self, prompt_build: str, agent_name: str, model: Union[GeminiModel, GPTModel], functions: Optional[List[Callable]] = None, final_prompt: Optional[str] = None, storage: Optional[InteractionHistory] = None, max_history: int = 20, use_history: bool = True, use_score: bool = True, score_average: Union[int, float] = 3):
-        super().__init__(prompt_build, agent_name, model, storage, max_history, use_history, use_score, score_average)
+    def __init__(self, prompt_build: str, agent_name: str, model: Union[GeminiModel, GPTModel], functions: Optional[List[Callable]] = None, final_prompt: Optional[str] = None, storage: Optional[InteractionHistory] = None, max_history: int = 20, use_storage: bool = True, use_history: bool = True, use_score: bool = True, score_average: Union[int, float] = 3):
+        super().__init__(prompt_build, agent_name, model, storage, max_history, use_storage, use_history, use_score, score_average)
         self.functions: Optional[List[Callable]] = functions or {}
 
         self.final_prompt = final_prompt
@@ -259,8 +316,8 @@ class ComplexAgent(SimpleAgent):
 class ManagerAgent(SimpleAgent):
     MAX_ALLOWED_HISTORY = 100
 
-    def __init__(self, agent_name: str, model: genai.GenerativeModel, agents: Dict[str, Union[SimpleAgent, ComplexAgent]], storage: Optional[InteractionHistory] = None, max_history: int = 100, use_history: bool = True, use_score: bool = True, score_average: Union[int, float] = 3):
-        super().__init__("", agent_name, model, storage, max_history, use_history, use_score, score_average)
+    def __init__(self, agent_name: str, model: genai.GenerativeModel, agents: Dict[str, Union[SimpleAgent, ComplexAgent]], storage: Optional[InteractionHistory] = None, max_history: int = 100, use_storage: bool = True, use_history: bool = True, use_score: bool = True, score_average: Union[int, float] = 3):
+        super().__init__("", agent_name, model, storage, max_history, use_storage, use_history, use_score, score_average)
         self.prompt_build: str = ""
 
         self.agents: Dict[str, Union[SimpleAgent, ComplexAgent]] = agents
