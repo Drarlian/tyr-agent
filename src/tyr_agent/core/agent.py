@@ -41,7 +41,7 @@ class SimpleAgent:
         try:
             agent_response: str = self.agent_model.generate(user_input, files, self.prompt_build, self.history, self.use_history)
 
-            if self.use_history and save_history:
+            if (self.use_history or self.use_storage) and save_history:
                 self._update_history(user_input, [agent_response], "simple")
 
             return agent_response
@@ -63,9 +63,12 @@ class SimpleAgent:
                 "score": score
             }
 
-            self.history.append(actual_conversation)
-            self.history = self.history[-self.MAX_HISTORY:]  # -> Mantendo apenas os N itens no histórico.
-            self.storage.save_history(self.agent_name, actual_conversation)
+            if self.history and self.use_history:
+                self.history.append(actual_conversation)
+                self.history = self.history[-self.MAX_HISTORY:]  # -> Mantendo apenas os N itens no histórico.
+
+            if self.storage and self.use_storage:
+                self.storage.save_history(self.agent_name, actual_conversation)
         except Exception as e:
             print(f'[ERROR] - Ocorreu um erro duração a atualização do histórico: {e}')
 
@@ -366,7 +369,7 @@ class ComplexAgent(SimpleAgent):
         try:
             agent_response = self.agent_model.generate_with_functions(user_input, files, self.prompt_build, self.history, self.use_history, self.functions, self.final_prompt)
 
-            if self.use_history and save_history:
+            if (self.use_history or self.use_storage) and save_history:
                 self._update_history(user_input, [agent_response], "complex")
 
             return agent_response
@@ -425,7 +428,7 @@ class ManagerAgent(SimpleAgent):
             await response.resolve()
             final_response_text: str = response.text.strip()
 
-            if self.use_history and save_history:
+            if (self.use_history or self.use_storage) and save_history:
                 self.__update_history(user_input, final_response_text, True, response_delegated_agents)
 
             return final_response_text

@@ -79,7 +79,7 @@ class GPTModel:
     def __build_messages(self, prompt_build: str, user_input: str, history: Optional[List[dict]], use_history: bool) -> List[Any]:
         messages: List[dict] = [{"role": "system", "content": prompt_build}]
 
-        if use_history:
+        if history and use_history:
             for interaction in history:
                 user_text = interaction["interaction"]["user"]
 

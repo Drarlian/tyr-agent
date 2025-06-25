@@ -105,7 +105,7 @@ class GeminiModel(FileMixin):
     def __build_messages(self, user_input: str, history: Optional[List[dict]], use_history: bool):
         messages: List = []
 
-        if use_history:
+        if history and use_history:
             for interaction in history:
                 user_text = interaction["interaction"]["user"]
 
