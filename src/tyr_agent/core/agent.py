@@ -1,7 +1,7 @@
 import json
 import asyncio
 import google.generativeai as genai
-from typing import List, Dict, Optional, Callable, Union
+from typing import List, Dict, Tuple, Optional, Callable, Union
 from datetime import datetime
 from tyr_agent.entities.entities import ManagerCallManyAgents, AgentCallInfo, AgentHistory, AgentInteraction
 from tyr_agent.models.gemini_model import GeminiModel
@@ -116,15 +116,16 @@ class SimpleAgent:
         except Exception as e:
             return False
 
-    def remove_agent_history(self) -> None:
+    def remove_agent_history(self, use_history: bool = False) -> None:
         """
         Remove o histórico carregado da instância atual.
         Não exclui o arquivo físico do histórico no disco.
+        :param use_history: Decide se o histórico vai continuar sendo usado, por padrão é False.
         :return: None
         """
         self.storage: InteractionHistory | None = None
         self.history: List[dict] | None = None
-        self.use_history: bool = False
+        self.use_history: bool = use_history
 
     def clear_agent_history(self) -> None:
         """
@@ -138,117 +139,178 @@ class SimpleAgent:
     def clear_agent_storage(self) -> None:
         """
         Limpa o campo storage do agente, caso ele exista.
-        Realmente limpa o arquivo do histórico no disco.
+        Limpa o arquivo do histórico no disco.
         :return: None
         """
         if self.storage is not None:
             self.storage.clear_history()
 
-    def rate_interaction(self, interaction_id: str, score: Union[int, float]) -> bool:
+    def rate_interaction(self, interaction_id: str, score: Union[int, float]) -> Tuple[bool, bool]:
         """
         Define o score de uma interação específica do histórico.
+        Pode ser feita apenas no history ou através do storage, caso ele esteja sendo usado.
         Atualiza o histórico atual do agente baseado no score_average do agente.
         :param interaction_id: ID da interação.
         :param score: Nota definida para a interação, indo apenas de 0 a 5.
-        :return: True caso tenha dado certo | False caso tenha dado errado.
+        :return: Retorna uma tupla na seguinte lógica: (response_update_history, response_update_storage)
         """
         try:
-            if not self.use_history or not self.storage:
-                return False
+            if not self.history and not self.storage:
+                return False, False
 
             if not self._is_valid_score(score):
-                return False
+                return False, False
 
-            response_update: bool = self.storage.update_score(self.agent_name, interaction_id, score)
+            response_update_history: bool = False
+            response_update_storage: bool = True
 
-            self.history = self.storage.load_history(self.agent_name)
+            if self.history:
+                # Atualizando o history:
+                for interaction in self.history:
+                    if interaction["id"] == interaction_id:
+                        interaction["score"] = score
+                        break
+                response_update_history = True
+
+            if self.storage:
+                # Atualizando o storage:
+                response_update_storage = self.storage.update_score(self.agent_name, interaction_id, score)
 
             if self.use_score:
+                # Filtrando o "novo" histórico. (Uma interação foi avaliada, então preciso verificar se ela vai sair)
                 if not self._is_valid_score(self.score_average):
                     self.score_average = 3
                 self._filter_history_by_score()
 
-            return response_update
+            return response_update_history, response_update_storage
         except Exception as e:
             print(e)
-            return False
+            return False, False
 
-    def delete_interaction(self, interaction_id: str) -> bool:
+    def delete_interaction(self, interaction_id: str) -> Tuple[bool, bool]:
         """
         Deleta a interação com o id informado.
+        Caso o agente não utilize o storage, deleta apenas a interação do history.
         :param interaction_id: ID da interação que será deletada.
-        :return: True caso tenha dado certo | False caso tenha dado errado.
+        :return: Retorna uma tupla na seguinte lógica: (response_delete_from_history, response_delete_from_storage)
         """
         try:
-            self.history = list(filter(lambda x: x["id"] != interaction_id, self.history))
-            response_delete_storage = self.storage.delete_history(self.agent_name, interaction_id)
+            if not self.history and not self.storage:
+                return False, False
 
-            return response_delete_storage
+            response_delete_from_history: bool = False
+            response_delete_from_storage: bool = True
+
+            if self.history:
+                self.history = list(filter(lambda x: x["id"] != interaction_id, self.history))
+                response_delete_from_history = True
+
+            if self.storage:
+                response_delete_from_storage = self.storage.delete_history(self.agent_name, interaction_id)
+
+            return response_delete_from_history, response_delete_from_storage
         except Exception as e:
-            return False
+            return False, False
 
-    def get_score_by_id(self, interaction_id: str) -> Union[int, float]:
+    def get_score_by_id(self, interaction_id: str, find_by_history: bool) -> Union[int, float]:
         """
         Pega o score da interação procurada.
+        Pode ser feita apenas no history ou através do storage, caso ele esteja sendo usado.
+        :param interaction_id: Id da interação procurada.
+        :param find_by_history: Define se a busca será feita no history ou no storage.
         :return: Retorna o score de uma interação.
         """
         try:
-            if not self.storage:
+            if not self.history and not self.storage:
                 return 0.0
 
-            data = self.storage.load_all()
+            if find_by_history and self.history:
+                # Procurando no history, se ele existir:
+                for interaction in self.history:
+                    if interaction.get("id") == interaction_id:
+                        return interaction.get("score")
 
-            for interaction in data.get(self.agent_name, []):
-                if interaction.get("id") == interaction_id:
-                    return interaction.get("score")
+            if not find_by_history and self.storage:
+                # Procurando no storage, se ele existir:
+                data = self.storage.load_all()
+
+                for interaction in data.get(self.agent_name, []):
+                    if interaction.get("id") == interaction_id:
+                        return interaction.get("score")
 
             return 0.0
         except Exception as e:
             print(f"[ERROR] - get_score_by_id: {e}")
             return 0.0
 
-    def get_average_score(self) -> float:
+    def get_average_score(self, find_by_history: bool) -> float:
         """
         Pega a média do score no histórico.
+        :param find_by_history: Define se a busca será feita no history ou no storage.
         :return: Média do score.
         """
         try:
-            if not self.storage:
+            if not self.history and not self.storage:
                 return 0.0
-
-            data = self.storage.load_all()
 
             sum_interactions: Union[int, float] = 0
             count_interactions: int = 0
 
-            for interaction in data.get(self.agent_name, []):
-                if isinstance(interaction.get("score"), (int, float)):
-                    sum_interactions += interaction.get("score")
-                    count_interactions += 1
+            if find_by_history and self.history:
+                for interaction in self.history:
+                    if isinstance(interaction.get("score"), (int, float)):
+                        sum_interactions += interaction.get("score")
+                        count_interactions += 1
 
-            if count_interactions == 0:
-                return 0.0
+                if count_interactions == 0:
+                    return 0.0
 
-            return sum_interactions / count_interactions
+                return sum_interactions / count_interactions
+
+            if not find_by_history and self.storage:
+                data = self.storage.load_all()
+
+                for interaction in data.get(self.agent_name, []):
+                    if isinstance(interaction.get("score"), (int, float)):
+                        sum_interactions += interaction.get("score")
+                        count_interactions += 1
+
+                if count_interactions == 0:
+                    return 0.0
+
+                return sum_interactions / count_interactions
+
+            return 0.0
         except Exception as e:
             return 0.0
 
-    def get_all_scores(self) -> List[dict]:
+    def get_all_scores(self, find_by_history: bool) -> List[dict]:
         """
         Pega todos os scores de um agente.
+        :param find_by_history: Define se a busca será feita no history ou no storage.
         :return: Retorna uma lista de dicionários contendo todos os ids e scores.
         """
         try:
-            if not self.storage:
+            if not self.history and not self.storage:
                 return []
 
-            data = self.storage.load_all()
+            if find_by_history and self.history:
+                return [
+                    {"id": i.get("id"), "score": i.get("score")}
+                    for i in self.history
+                    if "id" in i
+                ]
 
-            return [
-                {"id": i.get("id"), "score": i.get("score")}
-                for i in data.get(self.agent_name, [])
-                if "id" in i
-            ]
+            if not find_by_history and self.storage:
+                data = self.storage.load_all()
+
+                return [
+                    {"id": i.get("id"), "score": i.get("score")}
+                    for i in data.get(self.agent_name, [])
+                    if "id" in i
+                ]
+
+            return []
         except Exception as e:
             return []
 
