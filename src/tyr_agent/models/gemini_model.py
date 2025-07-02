@@ -1,10 +1,10 @@
 from typing import List, Optional, Union, Callable, Dict, Any
 from google.genai import types
-from tyr_agent.mixins.file_mixins import FileMixin
+from tyr_agent.mixins.gemini_file_mixins import GeminiFileMixin
 from tyr_agent.core.ai_config import configure_gemini
 
 
-class GeminiModel(FileMixin):
+class GeminiModel(GeminiFileMixin):
     def __init__(self, model_name: str, temperature: Union[int, float] = 0.7, max_tokens: int = 1000, api_key: Optional[str] = None):
         self.client = configure_gemini(api_key)
 
@@ -86,11 +86,11 @@ class GeminiModel(FileMixin):
 
         return final_response.text.strip()
 
-    def __create_messages(self, user_input: str, files: Optional[List[dict]], history: Optional[List[dict]], use_history: bool):
+    def __create_messages(self, user_input: str, files: Optional[List[dict]], history: Optional[List[dict]], use_history: bool) -> List[Any]:
         messages = self.__build_messages(user_input, history, use_history)
 
         if files:
-            files_formated = [self.convert_item_to_gemini_part(item["file"], item["file_name"]) for item in files]
+            files_formated = [self.convert_item_to_gemini_model(item["file"], item["file_name"]) for item in files]
             files_valid = [file for file in files_formated if file]
 
             # Adicionando os arquivos identificados dentro do parts da pergunta atual do usuário:

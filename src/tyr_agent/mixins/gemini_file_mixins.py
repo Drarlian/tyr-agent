@@ -3,8 +3,8 @@ from io import BytesIO
 from google.genai import types
 
 
-class FileMixin:
-    def convert_item_to_gemini_part(self, file: Union[str, BytesIO], file_name: str) -> Optional[types.Part]:
+class GeminiFileMixin:
+    def convert_item_to_gemini_model(self, file: Union[str, BytesIO], file_name: str) -> Optional[types.Part]:
         """
         Converte um path, base64 ou BytesIO para o formato ideal para ser enviado na requisição do Gemini.
         :param file: Arquivo a ser enviado, podendo ser path, base64 ou BytesIO.
@@ -29,7 +29,7 @@ class FileMixin:
         """
         Pega os bytes de um arquivo, seja via path, base64 ou BytesIO.
         :param file: Arquivo que terá seus bytes extraídos.
-        :return:
+        :return: Retorna os bytes do arquivo.
         """
         if isinstance(file, str):
             bytes_file = self.__convert_base64_to_bytes(file)

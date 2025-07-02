@@ -1,11 +1,12 @@
 from openai import OpenAI
 from typing import Optional, Union, Callable, List, Dict, Any
 from tyr_agent.core.ai_config import configure_gpt
+from tyr_agent.mixins.gpt_file_mixins import GPTFileMixin
 from tyr_agent.utils.gpt_function_format_utils import to_openai_tool
 import json
 
 
-class GPTModel:
+class GPTModel(GPTFileMixin):
     def __init__(self, model_name: str, temperature: Union[int, float] = 0.7, max_tokens: int = 1000, api_key: Optional[str] = None):
         self.client: OpenAI = configure_gpt(api_key)
 
@@ -20,7 +21,7 @@ class GPTModel:
         self.max_tokens = max_tokens
 
     def generate(self, user_input: str, files: Optional[List[dict]], prompt_build: str, history: Optional[List[dict]], use_history: bool) -> str:
-        messages = self.__build_messages(prompt_build, user_input, history, use_history)
+        messages = self.__create_messages(prompt_build, user_input, files, history, use_history)
 
         response = self.client.chat.completions.create(
             model=self.model_name,
@@ -36,7 +37,7 @@ class GPTModel:
         pass
 
     def generate_with_functions(self, user_input: str, files: Optional[List[dict]], prompt_build: str, history: Optional[List[dict]], use_history: bool, functions: Optional[List[Callable]], final_prompt: Optional[str]):
-        messages = self.__build_messages(prompt_build, user_input, history, use_history)
+        messages = self.__create_messages(prompt_build, user_input, files, history, use_history)
 
         # Criando um array com as funções no formato que o GPT precisa:
         tools = []
@@ -75,6 +76,28 @@ class GPTModel:
         )
 
         return response_answer_functions.choices[0].message.content.strip()
+
+    def __create_messages(self, prompt_build, user_input: str, files: Optional[List[dict]], history: Optional[List[dict]], use_history: bool) -> List[Any]:
+        messages = self.__build_messages(prompt_build, user_input, history, use_history)
+
+        if files:
+            files_formated = [self.convert_item_to_gpt_model(item["file"], item["file_name"]) for item in files]
+            files_valid = [{"type": "image_url", "image_url": {"url": file}} for file in files_formated if file]
+
+            # Adicionando os arquivos identificados dentro da pergunta atual do usuário:
+            if files_valid:
+                messages[-1] = {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": user_input},
+                        *files_valid[:10]
+                    ]
+                }
+
+        if not messages:
+            raise Exception("[ERROR] - Erro ao gerar o prompt do GPT.")
+
+        return messages
 
     def __build_messages(self, prompt_build: str, user_input: str, history: Optional[List[dict]], use_history: bool) -> List[Any]:
         messages: List[dict] = [{"role": "system", "content": prompt_build}]
