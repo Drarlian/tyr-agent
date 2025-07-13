@@ -1,6 +1,5 @@
 import json
 import asyncio
-import google.generativeai as genai
 from typing import List, Dict, Tuple, Optional, Callable, Union
 from datetime import datetime
 from tyr_agent.entities.entities import ManagerCallManyAgents, AgentCallInfo, AgentHistory, AgentInteraction
@@ -39,7 +38,7 @@ class SimpleAgent:
 
     async def chat(self, user_input: str, streaming: bool = False, files: Optional[List[dict]] = None, save_history: bool = True) -> Optional[str]:
         try:
-            agent_response: str = self.agent_model.generate(user_input, files, self.prompt_build, self.history, self.use_history)
+            agent_response: str = self.agent_model.generate(self.prompt_build, user_input, files, self.history, self.use_history)
 
             if (self.use_history or self.use_storage) and save_history:
                 self._update_history(user_input, [agent_response], "simple")
@@ -365,9 +364,9 @@ class ComplexAgent(SimpleAgent):
 
         self.final_prompt = final_prompt
 
-    async def chat(self, user_input: str, streaming: bool = False, files: Optional[List[dict]] = None, save_history: bool = True) -> str | None:
+    async def chat(self, user_input: str, streaming: bool = False, files: Optional[List[dict]] = None, save_history: bool = True) -> Optional[str]:
         try:
-            agent_response = self.agent_model.generate_with_functions(user_input, files, self.prompt_build, self.history, self.use_history, self.functions, self.final_prompt)
+            agent_response = self.agent_model.generate_with_functions(self.prompt_build, user_input, files, self.history, self.use_history, self.functions, self.final_prompt)
 
             if (self.use_history or self.use_storage) and save_history:
                 self._update_history(user_input, [agent_response], "complex")
@@ -381,33 +380,28 @@ class ComplexAgent(SimpleAgent):
 class ManagerAgent(SimpleAgent):
     MAX_ALLOWED_HISTORY = 100
 
-    def __init__(self, agent_name: str, model: genai.GenerativeModel, agents: Dict[str, Union[SimpleAgent, ComplexAgent]], storage: Optional[InteractionHistory] = None, max_history: int = 100, use_storage: bool = True, use_history: bool = True, use_score: bool = True, score_average: Union[int, float] = 3):
+    def __init__(self, agent_name: str, model: Union[GeminiModel, GPTModel], agents: List[Union[SimpleAgent, ComplexAgent]], storage: Optional[InteractionHistory] = None, max_history: int = 100, use_storage: bool = True, use_history: bool = True, use_score: bool = True, score_average: Union[int, float] = 3):
         super().__init__("", agent_name, model, storage, max_history, use_storage, use_history, use_score, score_average)
-        self.prompt_build: str = ""
 
-        self.agents: Dict[str, Union[SimpleAgent, ComplexAgent]] = agents
-
-        self.PROMPT_TEMPLATE: str = ""
+        self.agents: Dict[str, Union[SimpleAgent, ComplexAgent]] = {agent.agent_name: agent for agent in agents}
 
     async def chat(self, user_input: str, streaming: bool = False, files: Optional[List[dict]] = None, save_history: bool = True) -> Optional[str]:
-        # Gera o prompt com base no input e nos agentes disponíveis
-        prompt: str = self.__generate_prompt(user_input)
+        # Gera o prompt com base nos agentes disponíveis:
+        prompt: str = self.__generate_prompt()
 
         if not prompt:
             print(f"[ERRO] Não foi possível montar o prompt.")
             return None
 
         try:
-            response = await self.agent_model.generate_content_async(prompt, stream=True)
-            await response.resolve()
-            response_text: str = response.text.strip()
+            agent_response: str = self.agent_model.generate(prompt, user_input, None, self.history, self.use_history)
 
-            extracted_agents = self.__extract_agent_call(response_text)
+            extracted_agents = self.__extract_agent_call(agent_response)
 
             if not extracted_agents:
                 if self.use_history and save_history:
-                    self.__update_history(user_input, response_text, False, [])
-                return response_text
+                    self.__update_history(user_input, agent_response, False, [])
+                return agent_response
 
             # Encontrando os Agentes solicitados:
             delegated_agents = self.__find_correct_agents(extracted_agents)
@@ -419,19 +413,17 @@ class ManagerAgent(SimpleAgent):
 
             response_delegated_agents = await self.__execute_agents_calls(delegated_agents)
 
-            final_prompt: str = self.__generate_final_prompt(user_input, response_delegated_agents)
+            final_prompt: str = self.__generate_final_prompt(response_delegated_agents)
 
             if not final_prompt:
                 return "\n".join(f"{k}: {v}" for agent in response_delegated_agents for k, v in agent.items())
 
-            response = await self.agent_model.generate_content_async(final_prompt, stream=True)
-            await response.resolve()
-            final_response_text: str = response.text.strip()
+            final_agent_response: str = self.agent_model.generate(final_prompt, user_input, None, None, False)
 
             if (self.use_history or self.use_storage) and save_history:
-                self.__update_history(user_input, final_response_text, True, response_delegated_agents)
+                self.__update_history(user_input, agent_response, True, response_delegated_agents)
 
-            return final_response_text
+            return final_agent_response
 
         except Exception as e:
             print(f"[ERROR] - Falha ao interpretar a resposta do manager: {e}")
@@ -489,98 +481,118 @@ class ManagerAgent(SimpleAgent):
 
         return agents_response
 
-    def __generate_prompt(self, user_input: str) -> str:
+    def __generate_prompt(self) -> str:
         try:
-            if not self.use_history or not self.history:
-                formatted_history = False
-            else:
-                def insert_score(score: Union[int, float, float]):
-                    if self.use_score:
-                        return f" - Score: {str(score)+'/5' if score is not None else 'Não consta'}"
-                    else:
-                        return ''
-
-                formatted_history = "\n\n".join(
-                    f"{item['timestamp']}{insert_score(item['score'])}\nUser: {item['interaction'].get('user', '')}\n"
-                    + f"Agent: {item['interaction']['agent']}"
-                    for item in self.history
-                )
-
             formatted_agents = "\n".join(
-                f"Nome do Agente: {agent_name} - Definição do Agente: {agent.prompt_build}" for agent_name, agent in
+                f"- Nome do Agente: {agent_name}\n  Definição do Agente: {agent.prompt_build}\n" for agent_name, agent in
                 self.agents.items())
 
-            call_agent_explanation = """Com base na descrição dos agentes, decida se precisa chamar 0, 1 ou mais agentes.
-Para chamar algum agente responda APENAS com um JSON no formato:
+            first_prompt_template: str = """Você é um agente **gerente** responsável por coordenar uma equipe de agentes especializados. Sua missão é **analisar perguntas**, **dividir em partes quando necessário** e **delegar as partes apropriadas aos agentes mais adequados**. Caso nenhum agente seja apropriado, **você mesmo deve responder com um texto simples (sem JSON)**.
+
+🚨 INSTRUÇÃO CRÍTICA:
+
+Você DEVE responder **EXCLUSIVAMENTE com um JSON PURO** **quando decidir acionar qualquer agente**.
+
+⛔️ NUNCA misture texto comum com JSON.
+⛔️ NUNCA use markdown, blocos de código, ou comentários.
+✅ A resposta deve começar com `{` e terminar com `}`.
+
+📌 FORMATO DO JSON:
 
 {
-    "call_agents": true,
-    "agents_to_call":
-        [
-            {
-                "agent_to_call": "<nome_do_agente>",
-                "agent_message": "<mensagem que deve ser enviada ao agente>"
-            },
-            ...
-        ],
-}"""
-
-            first_prompt_template: str = f"""Você é um agente gerente responsável por coordenar uma equipe de agentes especializados. Cada agente possui uma função bem definida, e você deve delegar partes da pergunta do usuário para o(s) agente(s) mais adequados.
-Se nenhum agente for adequado, **responda diretamente você mesmo** com um texto comum (sem JSON).
-
-Abaixo está a descrição dos agentes disponíveis:
-
-{formatted_agents}
-
-O usuário fez a seguinte pergunta:
-
-"{user_input}"
-
-Sua tarefa é:
-- Analisar a pergunta do usuário.
-- Dividir a pergunta em partes, se necessário.
-- Escolher o(s) agente(s) corretos para cada parte.
-- Informar qual mensagem deve ser enviada a cada agente.
-
-{call_agent_explanation}
-
-**Importante:**
-- Se a pergunta do usuário puder ser dividida entre vários agentes, crie um item para cada agente.
-- Se apenas um agente for necessário, retorne o JSON contendo apenas um agente.
-            """
-
-            if self.use_history and formatted_history:
-                second_prompt_template: str = f"""
-Você pode usar o histórico de conversas abaixo para responder perguntas relacionadas a interações anteriores com o usuário. 
-Se o usuário perguntar sobre algo que já foi dito anteriormente, procure a informação no histórico.
-{
-'''\nCada resposta do agente no histórico pode conter uma nota de 0 a 5, representando o quanto ela foi útil para o usuário. 
-Use essas notas como um indicativo da qualidade da resposta anterior. Priorize informações com notas mais altas e busque manter esse nível de qualidade em sua resposta atual.\n''' if self.use_score else ''
+  "call_agents": true,
+  "agents_to_call": [
+    {
+      "agent_to_call": "<nome_do_agente>",
+      "agent_message": "<mensagem que deve ser enviada ao agente>"
+    }
+  ]
 }
-Histórico de Conversas:
-{formatted_history if formatted_history else "Não Consta."}"""
-            else:
-                second_prompt_template = ""
 
-            return first_prompt_template + second_prompt_template
+🧠 INSTRUÇÕES DE USO:
+
+1. Analise a pergunta do usuário.
+2. Divida em partes independentes, se necessário.
+3. Agrupe todas as partes destinadas ao mesmo agente em **uma única mensagem concatenada**.
+4. Escolha os agentes corretos com base na descrição.
+5. Retorne um JSON com todos os agentes envolvidos e a mensagem para cada um.
+6. Caso nenhum agente possa ajudar, responda diretamente com texto comum (sem JSON).
+"""
+
+            second_prompt_template: str = f"""
+🤖 AGENTES DISPONÍVEIS:
+
+{formatted_agents}"""
+
+            third_prompt_template: str = """
+✅ EXEMPLOS DE RESPOSTA VÁLIDA:
+
+➡️ Chamada de um único agente:
+{
+  "call_agents": true,
+  "agents_to_call": [
+    {
+      "agent_to_call": "MathAgent",
+      "agent_message": "Quanto é 27 vezes 3?"
+    }
+  ]
+}
+
+➡️ Chamada de múltiplos agentes:
+{
+  "call_agents": true,
+  "agents_to_call": [
+    {
+      "agent_to_call": "MathAgent",
+      "agent_message": "Qual é a raiz quadrada de 144?"
+    },
+    {
+      "agent_to_call": "SignAgent",
+      "agent_message": "O que significa ser do signo de Peixes?"
+    }
+  ]
+}
+
+➡️ Agrupando múltiplas perguntas para o mesmo agente:
+{
+  "call_agents": true,
+  "agents_to_call": [
+    {
+      "agent_to_call": "MathAgent",
+      "agent_message": "Quanto é 600+600? Quanto é 100-40?"
+    }
+  ]
+}
+
+➡️ Resposta direta (sem agentes):
+Claro! Posso te ajudar com isso diretamente. Me diga exatamente o que precisa.
+
+🧷 REGRAS OBRIGATÓRIAS:
+
+- O campo "call_agents" deve ser true quando estiver chamando agentes.
+- O campo "agents_to_call" deve ser uma lista com objetos contendo:
+    - "agent_to_call": o nome exato do agente.
+    - "agent_message": a mensagem específica que ele deve receber.
+- Se houver múltiplas mensagens para o mesmo agente, elas DEVEM ser agrupadas em uma só.
+- Se nenhuma chamada de agente for necessária, responda com texto comum e NÃO use JSON.
+- Nunca responda com um JSON se não for chamar agentes."""
+
+            return first_prompt_template + second_prompt_template + third_prompt_template
         except Exception as e:
             print(f'[ERROR] - Ocorreu um erro durante a geração do prompt: {e}')
             return ""
 
-    def __generate_final_prompt(self, user_input: str, agents_response: List[dict]) -> str:
+    def __generate_final_prompt(self, agents_response: List[dict]) -> str:
         try:
             combined: str = "\n".join(f"{k}: {v}" for agent in agents_response for k, v in agent.items())
-            enriched_prompt: str = f"""
-Você é um agente gerente que tem sob sua responsabilidade alguns agentes especializados.
+            enriched_prompt: str = f"""Você é um agente gerente que tem sob sua responsabilidade alguns agentes especializados.
 
-O usuário fez a seguinte pergunta inicialmente:
-"{user_input}"
-
+Você solicitou a chamada de alguns agentes. 
 Os seguintes agentes responderam individualmente:
 {combined}
 
-Com base nessas respostas, gere uma única resposta unificada e natural para o usuário final.
-        """
+Seu papel é responder ao usuário com base nas respostas dos agente. 
+Para isso gere uma única resposta unificada e natural para o usuário final."""
 
             return enriched_prompt
 
@@ -594,7 +606,8 @@ Com base nessas respostas, gere uma única resposta unificada e natural para o u
                 "id": str(uuid.uuid4()),
                 "timestamp": datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
                 "interaction": {
-                    "user": user_input
+                    "user": user_input,
+                    "agent": []
                 },
                 "type_agent": "manager",
                 "score": score,
@@ -603,10 +616,10 @@ Com base nessas respostas, gere uma única resposta unificada e natural para o u
 
             if called_delegated_agents:
                 for agent in response_delegated_agents:
-                    for agente_name, agente_response in agent.items():  # -> Esse for é sempre fixo em 1 item.
-                        actual_conversation["interaction"][agente_name] = agente_response
+                    for agente_name, response in agent.items():  # -> Esse for é sempre fixo em 1 item.
+                        actual_conversation["interaction"][agente_name] = [response]
 
-            actual_conversation["interaction"]['agent'] = agent_response
+            actual_conversation["interaction"]['agent'] = [agent_response]
 
             self.history.append(actual_conversation)
             self.history = self.history[-self.MAX_HISTORY:]  # -> Mantendo apenas os N itens no histórico.

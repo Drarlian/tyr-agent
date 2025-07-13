@@ -13,7 +13,7 @@ class GeminiModel(GeminiFileMixin):
         self.temperature = temperature
         self.max_tokens = max_tokens
 
-    def generate(self, user_input: str, files: Optional[List[dict]], prompt_build: str, history: Optional[List[dict]], use_history: bool) -> str:
+    def generate(self, prompt_build: str, user_input: str, files: Optional[List[dict]], history: Optional[List[dict]], use_history: bool) -> str:
         messages = self.__create_messages(user_input, files, history, use_history)
 
         response = self.client.models.generate_content(
@@ -28,7 +28,7 @@ class GeminiModel(GeminiFileMixin):
 
         return response.text.strip()
 
-    async def async_generate(self, user_input: str, files: Optional[List[dict]], prompt_build: str, history: Optional[List[dict]], use_history: bool) -> str:
+    async def async_generate(self, prompt_build: str, user_input: str, files: Optional[List[dict]], history: Optional[List[dict]], use_history: bool) -> str:
         messages = self.__create_messages(user_input, files, history, use_history)
 
         final_response: str = ""
@@ -45,7 +45,7 @@ class GeminiModel(GeminiFileMixin):
 
         return final_response.strip()
 
-    def generate_with_functions(self, user_input: str, files: Optional[List[dict]], prompt_build: str, history: Optional[List[dict]], use_history: bool, functions: Optional[List[Callable]], final_prompt: Optional[str]):
+    def generate_with_functions(self, prompt_build: str, user_input: str, files: Optional[List[dict]], history: Optional[List[dict]], use_history: bool, functions: Optional[List[Callable]], final_prompt: Optional[str]):
         messages = self.__create_messages(user_input, files, history, use_history)
 
         response = self.client.models.generate_content(

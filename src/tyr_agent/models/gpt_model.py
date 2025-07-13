@@ -20,7 +20,7 @@ class GPTModel(GPTFileMixin):
         self.temperature = temperature
         self.max_tokens = max_tokens
 
-    def generate(self, user_input: str, files: Optional[List[dict]], prompt_build: str, history: Optional[List[dict]], use_history: bool) -> str:
+    def generate(self, prompt_build: str, user_input: str, files: Optional[List[dict]], history: Optional[List[dict]], use_history: bool) -> str:
         messages = self.__create_messages(prompt_build, user_input, files, history, use_history)
 
         response = self.client.chat.completions.create(
@@ -33,10 +33,10 @@ class GPTModel(GPTFileMixin):
 
         return response.choices[0].message.content.strip()
 
-    async def async_generate(self, prompt_build: str, files: Optional[List[dict]], user_input: str, history: Optional[List[dict]], use_history: bool) -> str:
+    async def async_generate(self, prompt_build: str, user_input: str, files: Optional[List[dict]], history: Optional[List[dict]], use_history: bool) -> str:
         pass
 
-    def generate_with_functions(self, user_input: str, files: Optional[List[dict]], prompt_build: str, history: Optional[List[dict]], use_history: bool, functions: Optional[List[Callable]], final_prompt: Optional[str]):
+    def generate_with_functions(self, prompt_build: str, user_input: str, files: Optional[List[dict]], history: Optional[List[dict]], use_history: bool, functions: Optional[List[Callable]], final_prompt: Optional[str]):
         messages = self.__create_messages(prompt_build, user_input, files, history, use_history)
 
         # Criando um array com as funções no formato que o GPT precisa:
