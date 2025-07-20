@@ -5,7 +5,7 @@ from tyr_agent.core.ai_config import configure_gemini
 
 
 class GeminiModel(GeminiFileMixin):
-    def __init__(self, model_name: str, temperature: Union[int, float] = 0.7, max_tokens: int = 1000, api_key: Optional[str] = None):
+    def __init__(self, model_name: str, temperature: Union[int, float] = 0.4, max_tokens: int = 600, api_key: Optional[str] = None):
         self.client = configure_gemini(api_key)
 
         self.model_name = model_name

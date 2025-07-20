@@ -421,7 +421,7 @@ class ManagerAgent(SimpleAgent):
             final_agent_response: str = self.agent_model.generate(final_prompt, user_input, None, None, False)
 
             if (self.use_history or self.use_storage) and save_history:
-                self.__update_history(user_input, agent_response, True, response_delegated_agents)
+                self.__update_history(user_input, final_agent_response, True, response_delegated_agents)
 
             return final_agent_response
 
@@ -484,98 +484,45 @@ class ManagerAgent(SimpleAgent):
     def __generate_prompt(self) -> str:
         try:
             formatted_agents = "\n".join(
-                f"- Nome do Agente: {agent_name}\n  Definição do Agente: {agent.prompt_build}\n" for agent_name, agent in
+                f"- {agent_name}: {agent.prompt_build}\n" for agent_name, agent in
                 self.agents.items())
 
-            first_prompt_template: str = """Você é um agente **gerente** responsável por coordenar uma equipe de agentes especializados. Sua missão é **analisar perguntas**, **dividir em partes quando necessário** e **delegar as partes apropriadas aos agentes mais adequados**. Caso nenhum agente seja apropriado, **você mesmo deve responder com um texto simples (sem JSON)**.
+            first_prompt_template: str = """Você é um agente gerente responsável por delegar perguntas aos agentes adequados.
 
-🚨 INSTRUÇÃO CRÍTICA:
+INSTRUÇÕES OBRIGATÓRIAS:
+- Responda EXCLUSIVAMENTE com JSON puro ao delegar a agentes.
+- Nunca misture JSON com texto comum, markdown ou comentários.
+- Se nenhum agente puder responder, responda com texto comum (sem JSON).
+- Agrupe perguntas destinadas ao mesmo agente em uma única mensagem.
 
-Você DEVE responder **EXCLUSIVAMENTE com um JSON PURO** **quando decidir acionar qualquer agente**.
-
-⛔️ NUNCA misture texto comum com JSON.
-⛔️ NUNCA use markdown, blocos de código, ou comentários.
-✅ A resposta deve começar com `{` e terminar com `}`.
-
-📌 FORMATO DO JSON:
-
+FORMATO DO JSON:
 {
   "call_agents": true,
   "agents_to_call": [
-    {
-      "agent_to_call": "<nome_do_agente>",
-      "agent_message": "<mensagem que deve ser enviada ao agente>"
-    }
+    {"agent_to_call": "nome_do_agente", "agent_message": "mensagem_concatenada"}
   ]
 }
-
-🧠 INSTRUÇÕES DE USO:
-
-1. Analise a pergunta do usuário.
-2. Divida em partes independentes, se necessário.
-3. Agrupe todas as partes destinadas ao mesmo agente em **uma única mensagem concatenada**.
-4. Escolha os agentes corretos com base na descrição.
-5. Retorne um JSON com todos os agentes envolvidos e a mensagem para cada um.
-6. Caso nenhum agente possa ajudar, responda diretamente com texto comum (sem JSON).
 """
 
             second_prompt_template: str = f"""
-🤖 AGENTES DISPONÍVEIS:
+AGENTES DISPONÍVEIS:
 
 {formatted_agents}"""
 
             third_prompt_template: str = """
-✅ EXEMPLOS DE RESPOSTA VÁLIDA:
+EXEMPLOS:
 
-➡️ Chamada de um único agente:
-{
-  "call_agents": true,
-  "agents_to_call": [
-    {
-      "agent_to_call": "MathAgent",
-      "agent_message": "Quanto é 27 vezes 3?"
-    }
-  ]
-}
+Chamada única:
+{"call_agents": true, "agents_to_call": [{"agent_to_call": "MathAgent", "agent_message": "Quanto é 10+5?"}]}
 
-➡️ Chamada de múltiplos agentes:
-{
-  "call_agents": true,
-  "agents_to_call": [
-    {
-      "agent_to_call": "MathAgent",
-      "agent_message": "Qual é a raiz quadrada de 144?"
-    },
-    {
-      "agent_to_call": "SignAgent",
-      "agent_message": "O que significa ser do signo de Peixes?"
-    }
-  ]
-}
+Chamada múltipla:
+{"call_agents": true, "agents_to_call": [{"agent_to_call": "MathAgent", "agent_message": "Quanto é 20+20?"}, {"agent_to_call": "WeatherAgent", "agent_message": "Qual é o clima no Rio?"}]}
 
-➡️ Agrupando múltiplas perguntas para o mesmo agente:
-{
-  "call_agents": true,
-  "agents_to_call": [
-    {
-      "agent_to_call": "MathAgent",
-      "agent_message": "Quanto é 600+600? Quanto é 100-40?"
-    }
-  ]
-}
+Agrupamento para o mesmo agente:
+{"call_agents": true, "agents_to_call": [{"agent_to_call": "MathAgent", "agent_message": "Quanto é 5+5? Quanto é 10+10?"}]}
 
-➡️ Resposta direta (sem agentes):
-Claro! Posso te ajudar com isso diretamente. Me diga exatamente o que precisa.
-
-🧷 REGRAS OBRIGATÓRIAS:
-
-- O campo "call_agents" deve ser true quando estiver chamando agentes.
-- O campo "agents_to_call" deve ser uma lista com objetos contendo:
-    - "agent_to_call": o nome exato do agente.
-    - "agent_message": a mensagem específica que ele deve receber.
-- Se houver múltiplas mensagens para o mesmo agente, elas DEVEM ser agrupadas em uma só.
-- Se nenhuma chamada de agente for necessária, responda com texto comum e NÃO use JSON.
-- Nunca responda com um JSON se não for chamar agentes."""
+Resposta direta (sem agentes):
+Claro! Posso ajudar diretamente com essa questão."""
 
             return first_prompt_template + second_prompt_template + third_prompt_template
         except Exception as e:

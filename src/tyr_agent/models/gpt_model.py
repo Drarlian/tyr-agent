@@ -7,7 +7,7 @@ import json
 
 
 class GPTModel(GPTFileMixin):
-    def __init__(self, model_name: str, temperature: Union[int, float] = 0.7, max_tokens: int = 1000, api_key: Optional[str] = None):
+    def __init__(self, model_name: str, temperature: Union[int, float] = 0.4, max_tokens: int = 600, api_key: Optional[str] = None):
         self.client: OpenAI = configure_gpt(api_key)
 
         if model_name == "economy":
