@@ -407,8 +407,8 @@ class ManagerAgent(SimpleAgent):
             delegated_agents = self.__find_correct_agents(extracted_agents)
 
             if len(delegated_agents) == 0:
-                agentes_requisitados = extracted_agents if isinstance(extracted_agents, str) else json.dumps(extracted_agents, ensure_ascii=False)
-                print(f"[ERRO] Nenhum dos agentes requisitados foi encontrado: {agentes_requisitados}")
+                requested_agents: str = extracted_agents if isinstance(extracted_agents, str) else json.dumps(extracted_agents, ensure_ascii=False)
+                print(f"[ERRO] Nenhum dos agentes requisitados foi encontrado: {requested_agents}")
                 return None
 
             response_delegated_agents = await self.__execute_agents_calls(delegated_agents)
@@ -421,7 +421,7 @@ class ManagerAgent(SimpleAgent):
             final_agent_response: str = self.agent_model.generate(final_prompt, user_input, None, None, False)
 
             if (self.use_history or self.use_storage) and save_history:
-                self.__update_history(user_input, final_agent_response, True, response_delegated_agents)
+                self.__update_history(user_input, agent_response, True, response_delegated_agents)
 
             return final_agent_response
 
