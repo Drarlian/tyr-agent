@@ -1,5 +1,5 @@
 from .core.agent import SimpleAgent, ComplexAgent, ManagerAgent
-from .core.ai_config import configure_gemini
+from .core.ai_config import configure_gemini, configure_gpt
 from .storage.interaction_history import InteractionHistory
 from .utils.image_utils import image_to_base64
 from .mixins.gemini_file_mixins import GeminiFileMixin
@@ -13,6 +13,7 @@ __all__ = [
     "ComplexAgent",
     "ManagerAgent",
     "configure_gemini",
+    "configure_gpt",
     "InteractionHistory",
     "GeminiModel",
     "GPTModel",
