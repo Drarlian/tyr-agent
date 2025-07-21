@@ -4,145 +4,160 @@
 [![Python version](https://img.shields.io/badge/python-3.9%2B-blue)](https://www.python.org/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-TyrAgent é uma biblioteca para criação de agentes inteligentes com histórico, function-calling, suporte a arquivos e orquestração de múltiplos agentes. Ideal para aplicações com modelos generativos como Gemini, GPT e similares.
+TyrAgent é uma biblioteca para criação de agentes inteligentes com histórico, function-calling, suporte a arquivos e orquestração de múltiplos agentes. Compatível com os modelos **Gemini** (Google) e **GPT** (OpenAI), com integração nativa para ambos.
 
 - 💬 Conversas com ou sem `streaming`
 - 🧠 `Memória` persistente de interações (por agente), com controle total de uso e armazenamento
 - 📊 Sistema de `score` por interação para qualificar e filtrar o histórico
-- ⚙️ Execução de funções python durante a conversa, com suporte a `function calling`
+- ⚙️ Execução de funções Python com suporte a `function calling`
 - 🧑🏻‍💼 `Orquestração` de múltiplos agentes com roteamento automático de mensagens
-- 🖼️ Interpretação de múltiplos tipos de `arquivo`
+- 🖼️ Suporte a múltiplos tipos de `arquivo`
 - 🧩 Estrutura modular e extensível
 
---- 
+---
 
 ## 📦 Instalação via PyPI
 
 ```bash
-  pip install tyr-agent
+pip install tyr-agent
 ```
 
-> 🔒 Lembre-se de configurar sua variável `GEMINI_KEY` no `.env`
-
----
-
-## 🧩 Estrutura do projeto
-
-```
-tyr_agent/
-├── core/
-│   ├── agent.py  # SimpleAgent, ComplexAgent e ManagerAgent
-│   └── ai_config.py  # configure_gemini
-└── storage/
-    └── interaction_history.py  # InteractionHistory
-
-```
+> 🔐 É necessário definir as variáveis de ambiente:
+> - `GEMINI_KEY` para uso com modelos Gemini
+> - `OPENAI_API_KEY` para uso com modelos GPT (OpenAI)
 
 ---
 
 ## 💡 Exemplos de uso
 
-### 📘 Criando um agente simples
+### 📘 SimpleAgent
 
 ```python
+from tyr_agent import SimpleAgent, GeminiModel, GPTModel
 import asyncio
-import google.generativeai as genai
-from tyr_agent import SimpleAgent, configure_gemini
 
-configure_gemini()
 agent = SimpleAgent(
-    prompt_build="Você é um assistente de clima.",
-    agent_name="WeatherAgent",
-    model=genai.GenerativeModel("gemini-2.5-flash-preview-04-17"),
-    use_history=True,  # É um parâmetro opicional e pode ser True ou False.
-    use_score=True,    # É um parâmetro opicional e pode ser True ou False.,
-    score_average=3    # É um parâmetro opicional e pode variar de 0 a 5.,
+    prompt_build="Você é um agente especializado em ações brasileiras.",
+    agent_name="FinanceAgent",
+    model=GeminiModel("gemini-2.5-flash"),  # ou GPTModel("modelo_desejado")
+    use_storage=True,
+    use_history=True,
+    use_score=True,
 )
 
-# O parâmetro "save_history" também é opicional e pode ser True ou False.
-response = asyncio.run(agent.chat("Qual o clima em Salvador?", save_history=True))
+response = asyncio.run(agent.chat("Me fale sobre a WEGE3.", save_history=True))
+print(response)
 ```
 
-### ⚙️ Criando um agente com funções
+### ⚙️ ComplexAgent com funções
 
 ```python
+from tyr_agent import ComplexAgent, GeminiModel, GPTModel
+from typing import List
 import asyncio
-import google.generativeai as genai
-from tyr_agent import ComplexAgent, configure_gemini
 
-def somar(a: float, b: float): return a + b
+def somar(nums: List[float]) -> float: return sum(nums)
+def subtrair(nums: List[float]) -> float: return nums[0] - sum(nums[1:])
 
-def pegar_clima(cidade: str): return f"Clima em {cidade}: Ensolarado 28°C"
-
-configure_gemini()
 agent = ComplexAgent(
-    prompt_build="Você pode fazer cálculos e responder sobre o clima.",
-    agent_name="WeatherSumBot",
-    model=genai.GenerativeModel("gemini-2.5-flash-preview-04-17"),
-    functions={"somar": somar, "pegar_clima": pegar_clima},
-    use_history=False,  # É um parâmetro opicional e pode ser True ou False.
-    use_score=False,    # É um parâmetro opicional e pode ser True ou False.,
-    score_average=1     # É um parâmetro opicional e pode variar de 0 a 5.,
+    prompt_build="Você faz cálculos precisos com base nas funções disponíveis.",
+    agent_name="MathAgent",
+    model=GeminiModel("gemini-2.5-flash"),  # ou GPTModel("modelo_desejado")
+    functions=[somar, subtrair],
+    use_storage=True,
+    use_history=True,
+    use_score=True,
 )
 
-# O parâmetro "save_history" também é opicional e pode ser True ou False.
-response = asyncio.run(agent.chat("Me diga quanto é 10+5 e o clima de São Paulo", save_history=False))
+response = asyncio.run(agent.chat("Quanto é 14+18+24 e 18-6-2?", save_history=True))
+print(response)
 ```
 
-### 🧑🏻‍💼 Criando um orquestrador de agentes
+### 🧑🏻‍💼 ManagerAgent (Orquestrador)
 
 ```python
+from tyr_agent import SimpleAgent, ComplexAgent, ManagerAgent, GPTModel, GeminiModel
 import asyncio
-import google.generativeai as genai
-from tyr_agent import ManagerAgent, ComplexAgent, SimpleAgent, configure_gemini
 
-configure_gemini()
-model = genai.GenerativeModel("gemini-2.5-flash-preview-04-17")
+def get_clima(cidade: str) -> str: return f"O clima na cidade {cidade} é de 25ºC e esta ensolarado."
 
-weather_agent = SimpleAgent(
-    prompt_build="Você é um assistente de clima.",
+finance_agent = SimpleAgent(
+    prompt_build="Você é um agente especializado em ações brasileiras.",
+    agent_name="FinanceAgent",
+    model=GeminiModel("gemini-2.5-flash"),  # ou GPTModel("modelo_desejado")
+    use_storage=True,
+    use_history=True,
+    use_score=True,
+)
+
+weather_agent = ComplexAgent(
+    prompt_build="Você é um agente do clima.",
     agent_name="WeatherAgent",
-    model=model
+    model=GPTModel("gpt-4o"),  # ou GeminiModel("modelo_desejado")
+    functions=[get_clima],
 )
 
-def somar(a: float, b: float): return a + b
-
-def subtrair(a: float, b: float): return a - b
-
-math_agent = ComplexAgent(
-    prompt_build="Você pode fazer cálculos matemáticos.",
-    agent_name="MathAgent",
-    model=model,
-    functions={"somar": somar, "subtrair": subtrair}
+manager = ManagerAgent(
+    agent_name="Manager",
+    model=GPTModel("quality"),
+    agents=[finance_agent, weather_agent],
+    use_history=True
 )
 
-configure_gemini()
-manager_agent = ManagerAgent(
-    agent_name="ManagerAgent",
-    model=model,
-    agents={"weather": weather_agent, "math": math_agent},
-    use_history=True,  # É um parâmetro opicional e pode ser True ou False.,
-    use_score=True,    # É um parâmetro opicional e pode ser True ou False.,
-    score_average=4    # É um parâmetro opicional e pode variar de 0 a 5.,
-
-)
-
-# O parâmetro "save_history" também é opicional e pode ser True ou False.
-response = asyncio.run(manager_agent.chat("Me diga clima de São Paulo e quanto é 10+5", save_history=False))
+response = asyncio.run(manager.chat("Quanto é 10+10? E o clima no Rio?", save_history=True))
+print(response)
 ```
+
+### 📎 Envio de arquivos
+
+```python
+from tyr_agent import SimpleAgent, GeminiModel, GPTModel
+import asyncio
+
+agent = SimpleAgent(
+    prompt_build="Você é um agente especializado em leitura de documentos.",
+    agent_name="FileAgent",
+    model=GeminiModel("gemini-2.5-flash"),  # ou GPTModel("modelo_desejado")
+    use_storage=True,
+    use_history=True,
+    use_score=True,
+)
+
+files_info = [
+    {
+        "file": "D:\\caminho\\para\\meu_arquivo1.png",  # Pode ser um path, base64 ou BytesIO
+        "file_name": "Documento1.png"
+    },
+    {
+        "file": "D:\\caminho\\para\\meu_arquivo2.png",  # Pode ser um path, base64 ou BytesIO
+        "file_name": "Documento2.png"
+    },
+]
+
+response = asyncio.run(agent.chat("Sobre o que é esses documentos?", save_history=True, files=files_info))
+print(response)
+```
+
+---
+
+## 🔧 Modelos disponíveis
+
+- `GeminiModel(model_name: str, temperature=0.4, max_tokens=600)`
+- `GPTModel(model_name: str, temperature=0.4, max_tokens=600)`
+- `GPTModel("economy")` → usa `gpt-3.5-turbo`
+- `GPTModel("quality")` → usa `gpt-4o`
+- Ambos assumem as chaves das variáveis `GEMINI_KEY` ou `OPENAI_API_KEY` automaticamente.
 
 ---
 
 ## 🧠 Principais recursos
 
-- `SimpleAgent`: Conversa com contexto e histórico;
-- `ComplexAgent`: Capaz de sugerir e executar funções, processar os resultados e entregar uma resposta final;
-- `ManagerAgent`: Orquestra múltiplos agentes e delega tarefas automaticamente;
-- `InteractionHistory`: Armazena o histórico individual de cada agente em JSON;
-- Suporte a múltiplos tipos de arquivo via path, base64 ou BytesIO;
-- Sistema de score por interação (0 a 5) com média configurável (`score_average`) para decidir o que deve ou não ser utlizado no histórico;
-- Histórico totalmente gerenciável com métodos para criar, remover, limpar ou apagar os dados persistidos;
-- Estrutura modular e extensível para expansão futura (benchmark, visão computacional, execução de código etc.).
+- `SimpleAgent`: Respostas simples com ou sem histórico
+- `ComplexAgent`: Permite execução de funções e resposta final combinada
+- `ManagerAgent`: Gerencia e delega perguntas entre múltiplos agentes
+- Suporte completo a arquivos (path, base64, BytesIO)
+- Sistema de notas (score 0 a 5) para filtrar interações úteis
+- Histórico persistente e controlável por agente
 
 ---
 

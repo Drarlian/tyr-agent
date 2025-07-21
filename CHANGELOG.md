@@ -6,6 +6,42 @@ O formato segue as convenções do [Keep a Changelog](https://keepachangelog.com
 
 ---
 
+## [1.0.0] - 2025-07-20
+
+### Adicionado
+- Introduzida a lógica de **modelos desacoplados**, com as classes `GeminiModel` e `GPTModel`, permitindo que os agentes funcionem com **Gemini** ou **GPT (OpenAI)**.
+- Suporte nativo a parâmetros de configuração dos modelos:
+  - `temperature` (padrão: `0.4`)
+  - `max_tokens` (padrão: `600`)
+- Nova lógica de histórico e chamada de funções, agora utilizando estruturas nativas dos modelos (ex.: `roles`, `parts`, `tool_calls`, `tool_parts`), proporcionando respostas mais precisas e uso reduzido de tokens.
+- Variáveis de ambiente suportadas para configuração automática:
+  - `GEMINI_KEY` para modelos Gemini.
+  - `OPENAI_API_KEY` para modelos OpenAI (GPT).
+- Criação de facilitadores no `GPTModel`:
+  - Nome `"economy"` seleciona automaticamente o modelo `gpt-3.5-turbo`.
+  - Nome `"quality"` seleciona automaticamente o modelo `gpt-4o`.
+- Diversos métodos utilitários adicionados para controle avançado de:
+  - Histórico
+  - Armazenamento
+  - Execuções de função
+  - Prompt pós-execução
+- Nova forma simplificada de passar funções para os agentes: basta fornecer uma lista de funções puras (sem necessidade de dicionário com `name`).
+
+### Alterado
+- **Substituição completa da biblioteca `google-generativeai` pela `google-genai`**, a nova SDK oficial do Google.
+- **Refatoração da estrutura do arquivo `.json` de histórico**, adaptando o formato para compatibilidade com as estruturas nativas dos modelos (`Content`, `Part`, etc).
+- Os agentes `SimpleAgent`, `ComplexAgent` e `ManagerAgent` agora utilizam as novas classes de modelo, com configuração encapsulada. O uso de `configure_gemini()` tornou-se obsoleto.
+- Remoção dos prompts massivos antigos do `SimpleAgent` e `ComplexAgent`, que lidavam com histórico e funções de forma manual.
+- Refatoração completa do prompt do `ManagerAgent`, reduzido de **743 tokens para 336 tokens**, com ganhos significativos em eficiência e clareza.
+
+### Correções
+- Correções e ajustes gerais na comunicação dos agentes com os modelos, otimizando consumo de tokens e legibilidade das interações.
+- Simplificação e padronização interna de diversas estruturas de código.
+
+Esta é a primeira versão **estável** e **modular** do Tyr Agent. Um marco importante no amadurecimento da biblioteca como ferramenta flexível, extensível e pronta para múltiplos modelos.
+
+---
+
 ## [0.0.6] - 2025-06-05
 
 ### Adicionado
@@ -27,7 +63,7 @@ O formato segue as convenções do [Keep a Changelog](https://keepachangelog.com
 ### Correções
 - Pequenos bugs corrigidos relacionados à lógica de armazenamento e leitura do histórico.
 
-🙌 Agradecimento especial ao **Kayky Rodrigues** pela sugestão do sistema de avaliação por score, que agora faz parte da lógica central dos agentes.
+Agradecimento especial ao **Kayky Rodrigues** pela sugestão do sistema de avaliação por score, que agora faz parte da lógica central dos agentes.
 
 ---
 

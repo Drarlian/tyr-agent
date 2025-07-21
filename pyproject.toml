@@ -1,19 +1,19 @@
 [project]
 name = "tyr-agent"
-version = "0.0.6"
-description = "Agente LLM com execução de funções, histórico persistente, suporte a arquivos e orquestração de múltiplos agentes."
+version = "1.0.0"
+description = "Biblioteca para criação de agentes LLM com suporte a Gemini e GPT, histórico persistente, execução de funções e roteamento entre múltiplos agentes."
 authors = [
   { name = "Witor Oliveira", email = "witoredson@gmail.com" }
 ]
 readme = "README.md"
 license = { text = "MIT" }
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 dependencies = [
   "google-genai",
   "openai",
   "python-dotenv"
 ]
-keywords = ["llm", "agent", "gemini", "function-calling", "ai"]
+keywords = ["llm", "agent", "gemini", "openai", "function-calling", "multi-agent", "memory", "orchestration"]
 
 [project.urls]
 "Homepage" = "https://github.com/Drarlian/tyr-agent"
