@@ -7,7 +7,7 @@ import json
 
 
 class GPTModel(GPTFileMixin):
-    def __init__(self, model_name: str, temperature: Union[int, float] = 0.4, max_tokens: int = 600, api_key: Optional[str] = None):
+    def __init__(self, model_name: str, temperature: Union[int, float] = 0.4, max_tokens: int = 600, effort: str = "medium", api_key: Optional[str] = None):
         self.client: OpenAI = configure_gpt(api_key)
 
         if model_name == "economy":
@@ -17,21 +17,35 @@ class GPTModel(GPTFileMixin):
         else:
             self.model_name = model_name
 
+        if effort not in ["low", "medium", "high"]:
+            self.effort = "medium"
+
         self.temperature = temperature
         self.max_tokens = max_tokens
+        self.effort = effort
 
     def generate(self, prompt_build: str, user_input: str, files: Optional[List[dict]], history: Optional[List[dict]], use_history: bool) -> str:
         messages = self.__create_messages(prompt_build, user_input, files, history, use_history)
 
-        response = self.client.chat.completions.create(
-            model=self.model_name,
-            messages=messages,
-            temperature=self.temperature,
-            max_tokens=self.max_tokens,
-            stream=False
-        )
+        if self.model_name == 'gpt-5':
+            response = self.client.responses.create(
+                model="gpt-5",
+                reasoning={"effort": self.effort},
+                max_output_tokens=self.max_tokens,
+                input=messages,
+            )
 
-        return response.choices[0].message.content.strip()
+            return response.output_text
+        else:
+            response = self.client.chat.completions.create(
+                model=self.model_name,
+                messages=messages,
+                temperature=self.temperature,
+                max_tokens=self.max_tokens,
+                stream=False
+            )
+
+            return response.choices[0].message.content.strip()
 
     async def async_generate(self, prompt_build: str, user_input: str, files: Optional[List[dict]], history: Optional[List[dict]], use_history: bool) -> str:
         pass
