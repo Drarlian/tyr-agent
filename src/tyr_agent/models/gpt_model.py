@@ -4,6 +4,7 @@ from tyr_agent.core.ai_config import configure_gpt
 from tyr_agent.mixins.gpt_file_mixins import GPTFileMixin
 from tyr_agent.utils.gpt_function_format_utils import to_openai_tool
 import json
+import inspect
 
 
 class GPTModel(GPTFileMixin):
@@ -40,7 +41,7 @@ class GPTModel(GPTFileMixin):
     async def async_generate(self, prompt_build: str, user_input: str, files: Optional[List[dict]], history: Optional[List[dict]], use_history: bool) -> str:
         pass
 
-    def generate_with_functions(self, prompt_build: str, user_input: str, files: Optional[List[dict]], history: Optional[List[dict]], use_history: bool, functions: Optional[List[Callable]], final_prompt: Optional[str]):
+    async def generate_with_functions(self, prompt_build: str, user_input: str, files: Optional[List[dict]], history: Optional[List[dict]], use_history: bool, functions: Optional[List[Callable]], final_prompt: Optional[str]):
         messages = self.__create_messages(prompt_build, user_input, files, history, use_history)
 
         # Criando um array com as funções no formato que o GPT precisa:
@@ -62,7 +63,7 @@ class GPTModel(GPTFileMixin):
         if not calls:
             return response.output_text  # Nenhuma função chamada, retorna direto
 
-        new_messages = self.__execute_functions(calls, messages, functions)
+        new_messages = await self.__execute_functions(calls, messages, functions)
 
         # Alterando o prompt "system" das mensagens pra o prompt especial definido na inicialização do agente:
         if final_prompt:
@@ -115,7 +116,7 @@ class GPTModel(GPTFileMixin):
 
         return messages
 
-    def __execute_functions(self, calls, messages, functions: List[Callable]):
+    async def __execute_functions(self, calls, messages, functions: List[Callable]):
         # Parte 1: Criando um dicionário com o nome das funções e as funções:
         dict_functions: Dict[str, Callable] = {fn.__name__: fn for fn in functions}
 
@@ -129,15 +130,19 @@ class GPTModel(GPTFileMixin):
                 if fn is None:
                     raise Exception(f"[ERROR] - Função '{call.name}' não encontrada.")
                 try:
-                    result = fn(**json.loads(call.arguments))
+                    args = json.loads(call.arguments)
+                    if inspect.iscoroutinefunction(fn):
+                        result = await fn(**args)
+                    else:
+                        result = fn(**args)
                 except Exception as e:
-                    result = {"error": "Ocorreu um erro durante a execução da função!"}
+                    result = {"error": f"Ocorreu um erro durante a execução da função: {str(e)}"}
 
                 # Parte 4: Adicionando a resposta da função executada ao histórico de mensagens:
                 messages.append({
                     "type": "function_call_output",
                     "call_id": call.call_id,
-                    "output": json.dumps(json.dumps(result, ensure_ascii=False))
+                    "output": json.dumps({call.name: result})
                 })
 
         return messages

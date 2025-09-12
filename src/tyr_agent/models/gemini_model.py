@@ -2,6 +2,8 @@ from typing import List, Optional, Union, Callable, Dict, Any
 from google.genai import types
 from tyr_agent.mixins.gemini_file_mixins import GeminiFileMixin
 from tyr_agent.core.ai_config import configure_gemini
+import json
+import inspect
 
 
 class GeminiModel(GeminiFileMixin):
@@ -45,7 +47,7 @@ class GeminiModel(GeminiFileMixin):
 
         return final_response.strip()
 
-    def generate_with_functions(self, prompt_build: str, user_input: str, files: Optional[List[dict]], history: Optional[List[dict]], use_history: bool, functions: Optional[List[Callable]], final_prompt: Optional[str]):
+    async def generate_with_functions(self, prompt_build: str, user_input: str, files: Optional[List[dict]], history: Optional[List[dict]], use_history: bool, functions: Optional[List[Callable]], final_prompt: Optional[str]):
         messages = self.__create_messages(user_input, files, history, use_history)
 
         response = self.client.models.generate_content(
@@ -67,7 +69,7 @@ class GeminiModel(GeminiFileMixin):
         if not calls:
             return response.text.strip()  # Nenhuma função chamada, retorna direto
 
-        tool_content = self.__execute_functions(calls, functions)
+        tool_content = await self.__execute_functions(calls, functions)
 
         # Parte 5 - Segunda chamada: modelo continua raciocínio com base na resposta da função
         final_response = self.client.models.generate_content(
@@ -133,7 +135,7 @@ class GeminiModel(GeminiFileMixin):
 
         return messages
 
-    def __execute_functions(self, calls, functions: List[Callable]):
+    async def __execute_functions(self, calls, functions: List[Callable]):
         # Parte 1: Criando um dicionário com o nome das funções e as funções:
         dict_functions: Dict[str, Callable] = {fn.__name__: fn for fn in functions}
 
@@ -145,9 +147,12 @@ class GeminiModel(GeminiFileMixin):
                 raise Exception(f"[ERROR] - Função '{call.name}' não encontrada.")
 
             try:
-                result = fn(**call.args)
+                if inspect.iscoroutinefunction(fn):
+                    result = await fn(**call.args)
+                else:
+                    result = fn(**call.args)
             except Exception as e:
-                result = {"error": "Ocorreu um erro durante a execução da função!"}
+                result = {"error": f"Ocorreu um erro durante a execução da função: {str(e)}"}
 
             part = types.Part.from_function_response(
                 name=call.name,
