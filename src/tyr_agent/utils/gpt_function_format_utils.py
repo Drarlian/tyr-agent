@@ -70,7 +70,7 @@ def _parse_pydoc(func: Callable) -> dict:
     }
 
 
-def to_openai_tool(func: Callable) -> dict:
+def to_openai_tool(func: Callable, new_format: bool) -> dict:
     sig = inspect.signature(func)
     hints = get_type_hints(func)
     doc_info = _parse_pydoc(func)
@@ -82,17 +82,29 @@ def to_openai_tool(func: Callable) -> dict:
         json_schema["description"] = doc_info["param_descriptions"].get(name, "No description provided.")
         properties[name] = json_schema
 
-    return {
-        "type": "function",
-        "function": {
+    if new_format:
+        return {
+            "type": "function",
             "name": func.__name__,
             "description": doc_info["description"],
             "parameters": {
                 "type": "object",
                 "properties": properties,
                 "required": list(sig.parameters),
-                "additionalProperties": False
             },
-            "strict": True
         }
-    }
+    else:
+        return {
+            "type": "function",
+            "function": {
+                "name": func.__name__,
+                "description": doc_info["description"],
+                "parameters": {
+                    "type": "object",
+                    "properties": properties,
+                    "required": list(sig.parameters),
+                    "additionalProperties": False
+                },
+                "strict": True
+            }
+        }

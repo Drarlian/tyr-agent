@@ -13,7 +13,7 @@ class GPTModel(GPTFileMixin):
         if model_name == "economy":
             self.model_name = "gpt-3.5-turbo"
         elif model_name == "quality":
-            self.model_name = "gpt-4o"
+            self.model_name = "gpt-5"
         else:
             self.model_name = model_name
 
@@ -27,25 +27,15 @@ class GPTModel(GPTFileMixin):
     def generate(self, prompt_build: str, user_input: str, files: Optional[List[dict]], history: Optional[List[dict]], use_history: bool) -> str:
         messages = self.__create_messages(prompt_build, user_input, files, history, use_history)
 
-        if self.model_name == 'gpt-5':
-            response = self.client.responses.create(
-                model="gpt-5",
-                reasoning={"effort": self.effort},
-                max_output_tokens=self.max_tokens,
-                input=messages,
-            )
+        response = self.client.responses.create(
+            model="gpt-5",
+            reasoning={"effort": self.effort},
+            max_output_tokens=self.max_tokens,
+            input=messages
+        )
 
-            return response.output_text
-        else:
-            response = self.client.chat.completions.create(
-                model=self.model_name,
-                messages=messages,
-                temperature=self.temperature,
-                max_tokens=self.max_tokens,
-                stream=False
-            )
+        return response.output_text
 
-            return response.choices[0].message.content.strip()
 
     async def async_generate(self, prompt_build: str, user_input: str, files: Optional[List[dict]], history: Optional[List[dict]], use_history: bool) -> str:
         pass
@@ -56,23 +46,21 @@ class GPTModel(GPTFileMixin):
         # Criando um array com as funções no formato que o GPT precisa:
         tools = []
         for f in functions:
-            tools.append(to_openai_tool(f))
+            tools.append(to_openai_tool(f, True))
 
-        response = self.client.chat.completions.create(
+        response = self.client.responses.create(
             model=self.model_name,
-            messages=messages,
-            temperature=self.temperature,
-            max_tokens=self.max_tokens,
-            stream=False,
+            max_output_tokens=self.max_tokens,
+            input=messages,
             tools=tools if tools else None
         )
 
         # Pegando as funções chamadas pelo modelo:
-        calls = response.choices[0].message.tool_calls
+        calls = response.output
 
         # Validando se teve alguma chamada de função:
         if not calls:
-            return response.choices[0].message.content.strip()  # Nenhuma função chamada, retorna direto
+            return response.output_text  # Nenhuma função chamada, retorna direto
 
         new_messages = self.__execute_functions(calls, messages, functions)
 
@@ -81,15 +69,13 @@ class GPTModel(GPTFileMixin):
             new_messages[0]["content"] = final_prompt
 
         # Parte 5 - Segunda chamada: modelo continua raciocínio com base na resposta da função
-        response_answer_functions = self.client.chat.completions.create(
+        response_answer_functions = self.client.responses.create(
             model=self.model_name,
-            messages=new_messages,
-            temperature=self.temperature,
-            max_tokens=self.max_tokens,
-            stream=False,
+            max_output_tokens=self.max_tokens,
+            input=new_messages
         )
 
-        return response_answer_functions.choices[0].message.content.strip()
+        return response_answer_functions.output_text
 
     def __create_messages(self, prompt_build, user_input: str, files: Optional[List[dict]], history: Optional[List[dict]], use_history: bool) -> List[Any]:
         messages = self.__build_messages(prompt_build, user_input, history, use_history)
@@ -134,23 +120,24 @@ class GPTModel(GPTFileMixin):
         dict_functions: Dict[str, Callable] = {fn.__name__: fn for fn in functions}
 
         # Parte 2: Adicionando a mensagem do GPT solicitando a execução das funções no histórico:
-        messages.append({
-            "role": "assistant",
-            "content": None,
-            "tool_calls": [call.model_dump() for call in calls]
-        })
+        messages += calls
 
         # Parte 3: Executando as funções solicitadas pelo GPT:
         for call in calls:
-            fn = dict_functions.get(call.function.name)
-            if fn is None:
-                raise Exception(f"[ERROR] - Função '{call.name}' não encontrada.")
-            try:
-                result = fn(**json.loads(call.function.arguments))
-            except Exception as e:
-                result = {"error": "Ocorreu um erro durante a execução da função!"}
+            if call.type == "function_call":
+                fn = dict_functions.get(call.name)
+                if fn is None:
+                    raise Exception(f"[ERROR] - Função '{call.name}' não encontrada.")
+                try:
+                    result = fn(**json.loads(call.arguments))
+                except Exception as e:
+                    result = {"error": "Ocorreu um erro durante a execução da função!"}
 
-            # Parte 4: Adicionando a resposta da função executada ao histórico de mensagens:
-            messages.append({"role": "tool", "tool_call_id": call.id, "content": json.dumps(result, ensure_ascii=False)})
+                # Parte 4: Adicionando a resposta da função executada ao histórico de mensagens:
+                messages.append({
+                    "type": "function_call_output",
+                    "call_id": call.call_id,
+                    "output": json.dumps(json.dumps(result, ensure_ascii=False))
+                })
 
         return messages
