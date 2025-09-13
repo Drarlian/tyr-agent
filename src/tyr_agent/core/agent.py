@@ -366,7 +366,7 @@ class ComplexAgent(SimpleAgent):
 
     async def chat(self, user_input: str, streaming: bool = False, files: Optional[List[dict]] = None, save_history: bool = True) -> Optional[str]:
         try:
-            agent_response = self.agent_model.generate_with_functions(self.prompt_build, user_input, files, self.history, self.use_history, self.functions, self.final_prompt)
+            agent_response = await self.agent_model.generate_with_functions(self.prompt_build, user_input, files, self.history, self.use_history, self.functions, self.final_prompt)
 
             if (self.use_history or self.use_storage) and save_history:
                 self._update_history(user_input, [agent_response], "complex")
