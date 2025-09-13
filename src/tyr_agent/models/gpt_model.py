@@ -83,14 +83,14 @@ class GPTModel(GPTFileMixin):
 
         if files:
             files_formated = [self.convert_item_to_gpt_model(item["file"], item["file_name"]) for item in files]
-            files_valid = [{"type": "image_url", "image_url": {"url": file}} for file in files_formated if file]
+            files_valid = [{"type": "input_image", "image_url": file} for file in files_formated if file]
 
             # Adicionando os arquivos identificados dentro da pergunta atual do usuário:
             if files_valid:
                 messages[-1] = {
                     "role": "user",
                     "content": [
-                        {"type": "text", "text": user_input},
+                        {"type": "input_text", "text": user_input},
                         *files_valid[:10]
                     ]
                 }
