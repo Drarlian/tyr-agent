@@ -6,6 +6,17 @@ O formato segue as convenções do [Keep a Changelog](https://keepachangelog.com
 
 ---
 
+## [1.0.1] - 2025-09-14
+
+### Adicionado
+- Suporte aprimorado à OpenAI com compatibilidade para modelos mais recentes, como gpt-5 e variantes futuras.
+- Atualização da lógica de execução de funções nos modelos GPTModel e GeminiModel, permitindo que os agentes identifiquem e executem funções assíncronas (async def) de forma nativa.
+
+### Alterado
+- Otimização na comunicação com a API da OpenAI, melhorando a compatibilidade e estabilidade em modelos avançados.
+
+---
+
 ## [1.0.0] - 2025-07-20
 
 ### Adicionado

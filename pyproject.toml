@@ -1,6 +1,6 @@
 [project]
 name = "tyr-agent"
-version = "1.0.0"
+version = "1.0.1"
 description = "Biblioteca para criação de agentes LLM com suporte a Gemini e GPT, histórico persistente, execução de funções e roteamento entre múltiplos agentes."
 authors = [
   { name = "Witor Oliveira", email = "witoredson@gmail.com" }

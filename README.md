@@ -1,7 +1,7 @@
 # 🤖 Tyr Agent
 
 [![PyPI version](https://badge.fury.io/py/tyr-agent.svg)](https://pypi.org/project/tyr-agent/)
-[![Python version](https://img.shields.io/badge/python-3.9%2B-blue)](https://www.python.org/)
+[![Python version](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
 TyrAgent é uma biblioteca para criação de agentes inteligentes com histórico, function-calling, suporte a arquivos e orquestração de múltiplos agentes. Compatível com os modelos **Gemini** (Google) e **GPT** (OpenAI), com integração nativa para ambos.
