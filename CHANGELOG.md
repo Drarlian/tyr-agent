@@ -6,11 +6,21 @@ O formato segue as convenções do [Keep a Changelog](https://keepachangelog.com
 
 ---
 
+## [1.0.2] - 2025-09-15
+
+### Adicionado
+- Adicionada a lógica de `reasoning` e `effort` também no `ComplexAgent` ao utilizar o `GPTModel`, garantindo paridade com o comportamento do `SimpleAgent`.
+
+### Correções
+- Corrigida uma lógica interna no `ComplexAgent` com uso do `GPTModel`, que em alguns casos gerava falhas ao lidar com interações que não envolviam execução de função.
+
+---
+
 ## [1.0.1] - 2025-09-14
 
 ### Adicionado
-- Suporte aprimorado à OpenAI com compatibilidade para modelos mais recentes, como gpt-5 e variantes futuras.
-- Atualização da lógica de execução de funções nos modelos GPTModel e GeminiModel, permitindo que os agentes identifiquem e executem funções assíncronas (async def) de forma nativa.
+- Suporte aprimorado à OpenAI com compatibilidade para modelos mais recentes, como `gpt-5` e variantes futuras.
+- Atualização da lógica de execução de funções nos modelos `GPTModel` e `GeminiModel`, permitindo que os agentes identifiquem e executem funções assíncronas (`async def`) de forma nativa.
 
 ### Alterado
 - Otimização na comunicação com a API da OpenAI, melhorando a compatibilidade e estabilidade em modelos avançados.
