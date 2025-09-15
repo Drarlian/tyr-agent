@@ -60,7 +60,7 @@ class GPTModel(GPTFileMixin):
         calls = response.output
 
         # Validando se teve alguma chamada de função:
-        if not calls:
+        if not calls or not any(call.type == "function_call" for call in calls):
             return response.output_text  # Nenhuma função chamada, retorna direto
 
         new_messages = await self.__execute_functions(calls, messages, functions)
