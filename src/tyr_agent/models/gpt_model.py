@@ -51,6 +51,7 @@ class GPTModel(GPTFileMixin):
 
         response = self.client.responses.create(
             model=self.model_name,
+            reasoning={"effort": self.effort},
             max_output_tokens=self.max_tokens,
             input=messages,
             tools=tools if tools else None
@@ -72,6 +73,7 @@ class GPTModel(GPTFileMixin):
         # Parte 5 - Segunda chamada: modelo continua raciocínio com base na resposta da função
         response_answer_functions = self.client.responses.create(
             model=self.model_name,
+            reasoning={"effort": self.effort},
             max_output_tokens=self.max_tokens,
             input=new_messages
         )
