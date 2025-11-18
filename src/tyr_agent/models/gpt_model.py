@@ -1,5 +1,6 @@
 from openai import OpenAI
 from typing import Optional, Union, Callable, List, Dict, Any
+from openai.types.responses import ResponseTextConfigParam
 from tyr_agent.core.ai_config import configure_gpt
 from tyr_agent.mixins.gpt_file_mixins import GPTFileMixin
 from tyr_agent.utils.gpt_function_format_utils import to_openai_tool
@@ -8,7 +9,7 @@ import inspect
 
 
 class GPTModel(GPTFileMixin):
-    def __init__(self, model_name: str, temperature: Union[int, float] = 0.4, max_tokens: int = 600, effort: str = "medium", api_key: Optional[str] = None):
+    def __init__(self, model_name: str, temperature: Union[int, float] = 0.4, max_tokens: int = 600, effort: str = "medium", response_template: Optional[ResponseTextConfigParam] = None, api_key: Optional[str] = None):
         self.client: OpenAI = configure_gpt(api_key)
 
         if model_name == "economy":
@@ -24,6 +25,7 @@ class GPTModel(GPTFileMixin):
         self.temperature = temperature
         self.max_tokens = max_tokens
         self.effort = effort
+        self.response_template = response_template
 
     def generate(self, prompt_build: str, user_input: str, files: Optional[List[dict]], history: Optional[List[dict]], use_history: bool) -> str:
         messages = self.__create_messages(prompt_build, user_input, files, history, use_history)
@@ -32,7 +34,8 @@ class GPTModel(GPTFileMixin):
             model="gpt-5",
             reasoning={"effort": self.effort},
             max_output_tokens=self.max_tokens,
-            input=messages
+            input=messages,
+            text=self.response_template
         )
 
         return response.output_text
@@ -54,7 +57,8 @@ class GPTModel(GPTFileMixin):
             reasoning={"effort": self.effort},
             max_output_tokens=self.max_tokens,
             input=messages,
-            tools=tools if tools else None
+            tools=tools if tools else None,
+            text=self.response_template
         )
 
         # Pegando as funções chamadas pelo modelo:
@@ -75,7 +79,8 @@ class GPTModel(GPTFileMixin):
             model=self.model_name,
             reasoning={"effort": self.effort},
             max_output_tokens=self.max_tokens,
-            input=new_messages
+            input=new_messages,
+            text=self.response_template
         )
 
         return response_answer_functions.output_text
