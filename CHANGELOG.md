@@ -6,6 +6,14 @@ O formato segue as convenções do [Keep a Changelog](https://keepachangelog.com
 
 ---
 
+## [1.0.3] - 2025-11-18
+
+### Adicionado
+- Novo parâmetro opcional `response_template` na classe `GPTModel`, permitindo definir um template de resposta diretamente via API da OpenAI (`responses`).
+- O campo aceita instâncias de `ResponseTextConfigParam` (`openai.types.responses`), utilizando o parâmetro `text` conforme previsto na especificação oficial da OpenAI para resposta estruturada.
+
+---
+
 ## [1.0.2] - 2025-09-15
 
 ### Adicionado
