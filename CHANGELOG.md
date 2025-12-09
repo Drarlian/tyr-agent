@@ -6,6 +6,16 @@ O formato segue as convenções do [Keep a Changelog](https://keepachangelog.com
 
 ---
 
+## [1.0.4] - 2025-12-09
+
+### Adicionado
+- Atualização das classes `GPTModel` e `GPTFileMixin`, permitindo o recebimento e processamento de arquivos `.pdf`.
+
+### Correções
+- Corrigido o uso fixo do modelo `gpt-5` em todos os usos da classe `SimpleAgent` que utilizavam o método `generate` da classe `GPTModel`.
+
+---
+
 ## [1.0.3] - 2025-11-18
 
 ### Adicionado
