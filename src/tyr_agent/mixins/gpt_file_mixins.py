@@ -1,15 +1,22 @@
-from typing import Optional, Union
+from typing import Optional, Union, Tuple
 from io import BytesIO
 
 
 class GPTFileMixin:
-    def convert_item_to_gpt_model(self, file: Union[str, bytes, BytesIO], file_name: str) -> Optional[str]:
+    SUPPORTED_TYPES = {
+        "image/jpeg",
+        "image/png",
+        "image/webp",
+        "application/pdf"
+    }
+
+    def convert_item_to_gpt_model(self, file: Union[str, bytes, BytesIO], file_name: str) -> Optional[Tuple[str, str]]:
         """
         Converte um arquivo (path, bytes ou BytesIO) para base64 com prefixo data URL (data:image/png;base64,...).
         Suporta apenas imagens.
         :param file: Caminho para o arquivo, bytes ou BytesIO.
         :param file_name: Nome original do arquivo (usado para detectar o mime type).
-        :return: String base64 formatada como data URL.
+        :return: Tupla de Strings onde 0: base64 formatada como data URL; 1: Nome do arquivo.
         :raises: ValueError para tipos de arquivo não suportados ou erros de leitura.
         """
         import base64
@@ -17,13 +24,7 @@ class GPTFileMixin:
         # Detecta o mime type com base no nome
         mime_type = self.__detect_mime_type(file_name)
 
-        SUPPORTED_TYPES = {
-            "image/jpeg",
-            "image/png",
-            "image/webp",
-        }
-
-        if mime_type not in SUPPORTED_TYPES:
+        if mime_type not in self.SUPPORTED_TYPES:
             return None
 
         # Obtendo os bytes do arquivo:
@@ -35,7 +36,7 @@ class GPTFileMixin:
         b64_string = base64.b64encode(bytes_file).decode()
 
         # Retorna no formato data URL
-        return f"data:{mime_type};base64,{b64_string}"
+        return f"data:{mime_type};base64,{b64_string}", file_name
 
     def __detect_mime_type(self, file_name: str) -> str:
         """
@@ -51,6 +52,7 @@ class GPTFileMixin:
             ".jpeg": "image/jpeg",
             ".png": "image/png",
             ".webp": "image/webp",
+            ".pdf": "application/pdf"
         }
 
         ext = Path(file_name).suffix.lower()

@@ -15,7 +15,7 @@ class GPTModel(GPTFileMixin):
         if model_name == "economy":
             self.model_name = "gpt-3.5-turbo"
         elif model_name == "quality":
-            self.model_name = "gpt-5"
+            self.model_name = "gpt-5.1"
         else:
             self.model_name = model_name
 
@@ -31,7 +31,7 @@ class GPTModel(GPTFileMixin):
         messages = self.__create_messages(prompt_build, user_input, files, history, use_history)
 
         response = self.client.responses.create(
-            model="gpt-5",
+            model=self.model_name,
             reasoning={"effort": self.effort},
             max_output_tokens=self.max_tokens,
             input=messages,
@@ -90,7 +90,16 @@ class GPTModel(GPTFileMixin):
 
         if files:
             files_formated = [self.convert_item_to_gpt_model(item["file"], item["file_name"]) for item in files]
-            files_valid = [{"type": "input_image", "image_url": file} for file in files_formated if file]
+            files_valid = []
+            for file in files_formated:
+                if file is None:
+                    continue
+
+                if file[0].startswith("data:application/pdf"):
+                    files_valid.append({"type": "input_file", "filename": file[1], "file_data": file[0]})
+                    continue
+
+                files_valid.append({"type": "input_image", "image_url": file[0]})
 
             # Adicionando os arquivos identificados dentro da pergunta atual do usuário:
             if files_valid:
